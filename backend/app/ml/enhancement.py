@@ -86,22 +86,13 @@ def detect_contrast(image):
 # CONSERVATIVE CONTRAST ENHANCEMENT
 # --------------------------------------------------
 
-def enhance_contrast(
-    image,
-    clip_limit=1.2
-):
+
+def enhance_contrast(image, clip_limit=1.05):
     """
-    Very conservative luminance-only contrast enhancement.
-
-    This is deliberately mild because aggressive contrast
-    enhancement can alter pigmentation and lesion appearance.
+    Conservative luminance-only contrast enhancement.
+    Blend the result with the original to reduce aggressive changes.
     """
-
-    lab = cv2.cvtColor(
-        image,
-        cv2.COLOR_BGR2LAB
-    )
-
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
 
     clahe = cv2.createCLAHE(
@@ -109,14 +100,22 @@ def enhance_contrast(
         tileGridSize=(8, 8)
     )
 
-    l = clahe.apply(l)
+    enhanced_l = clahe.apply(l)
 
-    result = cv2.cvtColor(
-        cv2.merge((l, a, b)),
+    enhanced = cv2.cvtColor(
+        cv2.merge((enhanced_l, a, b)),
         cv2.COLOR_LAB2BGR
     )
 
+    # Retain most of the original image information.
+    result = cv2.addWeighted(
+        image, 0.70,
+        enhanced, 0.30,
+        0
+    )
+
     return result
+
 
 
 # --------------------------------------------------
