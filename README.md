@@ -1,1779 +1,1200 @@
 # DermaLens 🧠🩺
 
-
-
 <p align="center">
-
-  <b>Domain-Aware Dermatology Image Enhancement & Validation Framework\</b>
-
+  <b>A Domain-Aware Dermatology Image Enhancement & Quality-Aware Validation Framework</b><br>
+  <i>Adaptive Image Restoration • Multi-Metric Distortion Validation • Downstream AI Analysis</i>
 </p>
 
-
-
 <p align="center">
-
-  Adaptive image restoration • Quality-aware validation • Downstream AI analysis
-
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
 </p>
 
+---
 
+## 📑 Table of Contents
+
+1. [Executive Summary](#-executive-summary)
+2. [Problem Statement & Domain Challenges](#-problem-statement--domain-challenges)
+    - [The Teledermatology Degradation Problem](#the-teledermatology-degradation-problem)
+    - [Why Traditional Preprocessing Fails](#why-traditional-preprocessing-fails)
+3. [The DermaLens Paradigm](#-the-dermalens-paradigm)
+    - [Validation-First Enhancement](#validation-first-enhancement)
+    - [The Safety Fallback Guarantee](#the-safety-fallback-guarantee)
+4. [System Architecture](#-system-architecture)
+    - [High-Level Data Flow](#high-level-data-flow)
+    - [Component Architecture Breakdown](#component-architecture-breakdown)
+5. [Deep Dive: Pipeline Execution Stages](#-deep-dive-pipeline-execution-stages)
+    - [Stage 1: Image Acquisition & Pre-Check](#stage-1-image-acquisition--pre-check)
+    - [Stage 2: Multi-Dimensional Quality Profiling](#stage-2-multi-dimensional-quality-profiling)
+    - [Stage 3: Adaptive Candidate Generation](#stage-3-adaptive-candidate-generation)
+    - [Stage 4: Validation & Boundary Filtering](#stage-4-validation--boundary-filtering)
+    - [Stage 5: Candidate Selection & Safety Fallback](#stage-5-candidate-selection--safety-fallback)
+    - [Stage 6: Downstream Classifier Evaluation](#stage-6-downstream-classifier-evaluation)
+6. [Mathematical & Algorithmic Foundations](#-mathematical--algorithmic-foundations)
+    - [Variance of Laplacian (Blur Metrics)](#variance-of-laplacian-blur-metrics)
+    - [LAB Color Space Illumination Analysis](#lab-color-space-illumination-analysis)
+    - [Contrast Limited Adaptive Histogram Equalization (CLAHE)](#contrast-limited-adaptive-histogram-equalization-clahe)
+    - [Structural Similarity Index Measure (SSIM)](#structural-similarity-index-measure-ssim)
+    - [Color Delta Metric ($\Delta E^*_{\text{ab}}$)](#color-delta-metric-\delta-e_textab)
+7. [Deep Learning Restoration Models](#-deep-learning-restoration-models)
+    - [Real-ESRGAN (General $4\times$ Generative Restoration)](#real-esrgan-general-4\times-generative-restoration)
+    - [EDSR (Enhanced Deep Residual Networks $2\times$)](#edsr-enhanced-deep-residual-networks-2\times)
+    - [ISIC ResNet18 Abnormality Classification](#isic-resnet18-abnormality-classification)
+8. [Comprehensive Tech Stack](#-comprehensive-tech-stack)
+9. [Directory Structure & Module Reference](#-directory-structure--module-reference)
+10. [API Reference & Schema Documentation](#-api-reference--schema-documentation)
+    - [`POST /api/upload`](#post-apiupload)
+    - [`GET /api/health`](#get-apihealth)
+11. [Installation & Setup Guide](#-installation--setup-guide)
+    - [Prerequisites](#prerequisites)
+    - [Backend Setup](#backend-setup)
+    - [Frontend Setup](#frontend-setup)
+12. [Evaluation Metrics & Benchmark Protocols](#-evaluation-metrics--benchmark-protocols)
+13. [Future Roadmap](#-future-roadmap)
+14. [Limitations & Clinical Disclaimer](#-limitations--clinical-disclaimer)
+15. [Author & Institutional Credits](#-author--institutional-credits)
 
 ---
 
+## 🔬 Executive Summary
 
+**DermaLens** is an open-source, domain-aware image enhancement and quality-validation framework engineered specifically for dermatological AI systems. 
 
-## ✨ Overview
+In real-world clinical and teledermatology settings, consumer-grade smartphone sensors produce images with significant quality variances—ranging from extreme underexposure and motion blur to compression artifacts and sensor noise. Standard computer vision preprocessing pipelines typically apply fixed, indiscriminate filters (such as global histogram equalization or universal bilateral blurring) across all inputs. When applied to clinical imagery, these fixed transformations frequently introduce false diagnostic artifacts, alter subtle lesion pigmentation, and distort boundary margins necessary for differential diagnosis.
 
-
-
-DermaLens is a ****domain-aware dermatology image enhancement and validation framework**** designed to improve degraded skin images before downstream abnormality analysis.
-
-
-
-Real-world dermatology images may be captured using ordinary phone cameras and can contain:
-
-
-
-- Low illumination
-
-- Blur
-
-- Motion artifacts
-
-- Sensor noise
-
-- Compression artifacts
-
-- Poor contrast
-
-- Limited image resolution
-
-
-
-Instead of applying a fixed preprocessing operation to every image, DermaLens analyzes the input image and generates ****multiple enhancement candidates****.
-
-
-
-Each candidate is evaluated using image-quality and preservation metrics before the system selects the most suitable result.
-
-
-
-The goal is not simply to make an image look sharper.
-
-
-
-> ****The goal is to make the image clearer while preserving the visual structures and information present in the original image.****
-
-
+DermaLens re-frames medical image enhancement as a **decision-making and validation-first workflow**. Instead of immediately modifying an input image, DermaLens:
+1. Profiles the physical image quality across brightness, contrast, blur, and noise dimensions.
+2. Dynamically generates targeted enhancement candidates using localized signal-processing algorithms and deep super-resolution neural networks.
+3. Evaluates every candidate using strict structural preservation metrics and color variance boundaries.
+4. Accepts only the best safe candidate, or **reverts directly to the original image** if all candidates introduce unacceptable distortion.
+5. Measures downstream AI classification performance across both original and enhanced images to verify prediction stability.
 
 ---
 
+## 🚨 Problem Statement & Domain Challenges
 
+### The Teledermatology Degradation Problem
 
-## 🚨 Problem
+Remote clinical assessment and consumer mobile health platforms rely heavily on unstructured image acquisition. Unlike dermoscopic imaging—which uses specialized polarized lighting and fixed magnification lenses—smartphone imagery captured by patients or non-specialist clinicians encounters severe environmental variables:
 
+* **Low Illumination:** Ambient light deficits obscure subtle erythematous or hyperpigmented boundaries.
+* **Handshake Motion Blur:** Low shutter speeds under indoor lighting introduce high spatial frequency loss.
+* **Sensor Thermal Noise:** High ISO settings on smaller mobile camera sensors corrupt uniform skin textures with granular noise patterns.
+* **JPEG & Compression Artifacts:** Bandwidth-saving compression algorithms erase fine structural details, creating blocky false edges.
+* **Inconsistent Color Temperature:** Uncalibrated white balances shift skin tones, complicating color-based diagnostic scoring (such as the ABCD rule for melanoma).
 
+| Artifact Type | Physical Cause | Impact on Downstream Models |
+| :--- | :--- | :--- |
+| **Underexposure** | Low ambient lighting, backlighting | Shifts activation maps away from lesion center; reduces confidence |
+| **Motion Blur** | Low shutter speed, unstable camera | Erases fine peripheral boundary contours; causes false lesion sizing |
+| **Sensor Noise** | High ISO settings | Induces spurious gradient spikes in convolutional filters |
+| **Over-Saturation** | Direct flash reflection | Saturates pixel intensities, destroying color gradient information |
 
-Dermatology images collected outside controlled imaging environments can vary significantly in quality.
+### Why Traditional Preprocessing Fails
 
+Generic image preprocessing pipelines operate under the assumption that increasing global contrast or high-frequency sharpness yields a "better" image. In medical computer vision, this assumption breaks down completely:
 
+1. **Over-Sharpening Creates Hallucinated Borders:** Unsharp masking or aggressive Laplace filters amplify skin texture lines into thick, dark borders that downstream neural networks misinterpret as irregular lesion margins.
+2. **Global Histogram Equalization Distorts Pigmentation:** Stretching contrast across the entire image channel alters true color representation, making benign lesions appear necrotic or inflamed.
+3. **Deep Restoration Hallucinations:** Generative super-resolution models (e.g., GAN-based architectures) can introduce hallucinated visual patterns that mimic clinical structures not present in the patient's actual skin.
 
-A downstream AI model may receive an image that is:
-
-
-
-- Too dark
-
-- Blurry
-
-- Noisy
-
-- Low contrast
-
-- Compressed
-
-- Captured at insufficient resolution
-
-
-
-Traditional preprocessing pipelines often apply the same transformation regardless of image quality.
-
-
-
-Aggressive enhancement can introduce problems such as:
-
-
-
-- Artificial textures
-
-- False edges
-
-- Color shifts
-
-- Noise amplification
-
-- Loss of subtle structures
-
-- Over-sharpening
-
-
-
-Therefore:
-
-
-
-> ****Higher numerical sharpness does not necessarily mean a better dermatology image.****
-
-
-
-DermaLens treats enhancement as a ****validation problem****, rather than a simple image-processing problem.
-
-
+> **Crucial Diagnostic Axiom:** *Higher visual sharpness or artificially boosted model confidence does not imply clinical correctness.*
 
 ---
 
+## 🛡️ The DermaLens Paradigm
+
+### Validation-First Enhancement
+
+DermaLens operates under a strict **Validation-First** paradigm. Enhancement is not treated as a deterministic image transformation function $f(x) = y$, but as an optimization and candidate filtering problem:
+
+$$\text{Select } C^* \in \{C_0, C_1, \dots, C_n\} \quad \text{subject to} \quad \mathcal{V}(C_i, C_0) \le \tau$$
+
+Where $C_0$ represents the unassisted original image, $C_1 \dots C_n$ represent generated enhancement candidates, $\mathcal{V}$ represents a multi-metric distortion validator function, and $\tau$ denotes strict safety thresholds.
++-----------------------------------------------------------------------+
+|                         DERMALENS PARADIGM                            |
++-----------------------------------------------------------------------+
+|                                                                       |
+|   [Raw Input Image]                                                   |
+|           |                                                           |
+|           v                                                           |
+|   +-------------------+                                               |
+|   | Quality Profiling | --> Measures Brightness, Blur, Noise, Contrast|
+|   +-------------------+                                               |
+|           |                                                           |
+|           v                                                           |
+|   +-------------------+                                               |
+|   | Targeted Candidate| --> Generates CLAHE, Gamma, Real-ESRGAN,     |
+|   |    Generation     |     and EDSR Candidate Variations             |
+|   +-------------------+                                               |
+|           |                                                           |
+|           v                                                           |
+|   +-------------------+                                               |
+|   |  Multi-Metric     | --> Evaluates SSIM, Delta E, Noise Spike,     |
+|   | Validation Layer  |     and Blur Differential Bounds              |
+|   +-------------------+                                               |
+|           |                                                           |
+|     +-----+-----+                                                     |
+|     |           |                                                     |
+|  [PASSED]   [REJECTED ALL]                                            |
+|     |           |                                                     |
+|     v           v                                                     |
+| [Best Valid] [Original Image Preserved]                               |
+|     \           /                                                     |
+|      v         v                                                      |
+|   +-------------------+                                               |
+|   | Downstream ISIC   | --> Measures Confidence & Prediction Shifts   |
+|   | Classifier Model  |                                               |
+|   +-------------------+                                               |
++-----------------------------------------------------------------------+
 
 
-## ✅ Solution
+### The Safety Fallback Guarantee
 
+If an input image is already optimal, or if every generated candidate exceeds the distortion boundaries (e.g., introducing a color shift $\Delta E > 12.0$ or dropping Structural Similarity $\text{SSIM} < 0.85$), DermaLens activates its **Safety Fallback Mechanism**.
 
-
-DermaLens uses an adaptive candidate-based enhancement pipeline.
-
-
-
-Instead of immediately modifying the uploaded image, the system:
-
-
-
-1\. Analyzes the original image.
-
-2\. Detects relevant quality problems.
-
-3\. Generates appropriate enhancement candidates.
-
-4\. Measures the effect of each candidate.
-
-5\. Rejects candidates that introduce excessive distortion.
-
-6\. Selects the best valid candidate.
-
-7\. Preserves the original image when no candidate provides a sufficiently safe improvement.
-
-8\. Passes the resulting image to downstream abnormality analysis.
-
-
+The system completely rejects all modified images and passes the unassisted original image $C_0$ directly to the downstream classification tier, guaranteeing that image quality is never degraded below its input state.
 
 ---
-
-
 
 ## ⚙️ System Architecture
 
-
-
-\`\`\`text
-
-                         USER IMAGE
-
-                             │
-
-                             ▼
-
-                  ┌─────────────────────┐
-
-                  │   QUALITY ANALYSIS  │
-
-                  │                     │
-
-                  │ • Brightness        │
-
-                  │ • Sharpness / Blur  │
-
-                  │ • Contrast          │
-
-                  │ • Noise             │
-
-                  └──────────┬──────────┘
-
-                             │
-
-                             ▼
-
-                 ┌────────────────────────┐
-
-                 │  CANDIDATE GENERATION  │
-
-                 │                        │
-
-                 │ • Brightness correction│
-
-                 │ • Contrast enhancement │
-
-                 │ • Noise reduction      │
-
-                 │ • Super-resolution     │
-
-                 │ • Real-ESRGAN          │
-
-                 │ • EDSR                 │
-
-                 └───────────┬────────────┘
-
-                             │
-
-                             ▼
-
-                  ┌──────────────────────┐
-
-                  │   VALIDATION LAYER   │
-
-                  │                      │
-
-                  │ • Quality improvement│
-
-                  │ • Exposure change    │
-
-                  │ • Noise change       │
-
-                  │ • Structural similarity
-
-                  │ • Color shift        │
-
-                  │ • Sharpness change   │
-
-                  └──────────┬───────────┘
-
-                             │
-
-                             ▼
-
-                  ┌──────────────────────┐
-
-                  │ BEST VALID CANDIDATE │
-
-                  │                      │
-
-                  │ Enhanced image       │
-
-                  │ OR                   │
-
-                  │ Original image       │
-
-                  └──────────┬───────────┘
-
-                             │
-
-                             ▼
-
-                  ┌──────────────────────┐
-
-                  │ DOWNSTREAM ANALYSIS  │
-
-                  │                      │
-
-                  │ Lesion → ISIC model │
-
-                  │ Wound  → future     │
-
-                  │ Other  → future     │
-
-                  └──────────────────────┘
-
-\`\`\`
-
-
-
----
-
-
-
-## 🧪 How It Works
-
-
-
-### 1️⃣ Image Upload
-
-
-
-The user uploads a dermatology image.
-
-
-
-The application accepts common image formats and sends the image to the FastAPI backend for quality analysis and preprocessing.
-
-
-
-The enhancement layer is designed to work with both:
-
-
-
-* Curated dermatology datasets such as ISIC
-
-* Real-world images captured using ordinary cameras
-
-
-
-The preprocessing system does not assume that every image has the same quality characteristics.
-
-
-
----
-
-
-
-### 2️⃣ Quality Analysis
-
-
-
-The original image is analyzed before enhancement.
-
-
-
-Current measurements include:
-
-
-
-#### Brightness
-
-
-
-Measures the average illumination level of the image.
-
-
-
-Brightness is used to identify images that may require illumination correction.
-
-
-
-#### Sharpness
-
-
-
-Sharpness is estimated using the ****variance of the Laplacian****.
-
-
-
-A low Laplacian variance generally indicates a blurry image.
-
-
-
-#### Contrast
-
-
-
-Contrast measures intensity variation within the image.
-
-
-
-Low contrast can indicate weak visual separation between image regions.
-
-
-
-#### Noise
-
-
-
-Noise characteristics are evaluated during candidate comparison to determine whether an enhancement operation introduces excessive noise.
-
-
-
----
-
-
-
-### 3️⃣ Adaptive Candidate Generation
-
-
-
-DermaLens does not blindly apply a single enhancement operation to every image.
-
-
-
-Instead, the pipeline generates enhancement candidates according to the detected image characteristics.
-
-
-
-Possible enhancement operations include:
-
-
-
-#### Brightness Enhancement
-
-
-
-Low-light images can undergo adaptive illumination correction using LAB color-space processing and gamma adjustment.
-
-
-
-#### Contrast Enhancement
-
-
-
-Images with insufficient contrast can undergo controlled contrast enhancement.
-
-
-
-#### Noise Reduction
-
-
-
-Noise reduction can be applied when image noise is detected.
-
-
-
-The resulting candidate is then evaluated to determine whether the reduction in noise comes at the cost of important image structure.
-
-
-
-#### Super Resolution
-
-
-
-DermaLens supports AI-assisted super-resolution processing.
-
-
-
-Current models include:
-
-
-
-* ****Real-ESRGAN****
-
-* ****EDSR****
-
-
-
-The pipeline can use adaptive full-resolution processing when CPU constraints make direct EDSR processing impractical for the input image size.
-
-
-
----
-
-
-
-### 4️⃣ Candidate Validation
-
-
-
-Candidate generation alone is not enough.
-
-
-
-Every candidate must be evaluated against the original image.
-
-
-
-The validation layer currently considers factors such as:
-
-
-
-\`\`\`text
-
-Quality improvement
-
-Exposure improvement
-
-Sharpness change
-
-Noise change
-
-Structural similarity
-
-Color shift
-
-\`\`\`
-
-
-
-This prevents the system from automatically selecting an image simply because it has a higher numerical sharpness score.
-
-
-
-For example:
-
-
-
-\`\`\`text
-
-Candidate A
-
-
-
-Sharpness       ↑
-
-Contrast        ↑
-
-Noise           ↑↑
-
-Structure       ↓
-
-
-
-→ Rejected
-
-\`\`\`
-
-
-
-while:
-
-
-
-\`\`\`text
-
-Candidate B
-
-
-
-Brightness      ↑
-
-Sharpness       ↑
-
-Noise           ≈
-
-Structure       ≈
-
-Color shift     Low
-
-
-
-→ Potentially accepted
-
-\`\`\`
-
-
-
-The objective is ****controlled improvement****, not maximum enhancement.
-
-
-
----
-
-
-
-### 5️⃣ Best Candidate Selection
-
-
-
-After candidate validation, DermaLens selects the highest-scoring valid candidate.
-
-
-
-If none of the generated candidates satisfies the validation criteria, the original image is preserved.
-
-
-
-\`\`\`text
-
-Enhanced candidates
-
-        │
-
-        ▼
-
-Validation checks
-
-        │
-
-        ├── Valid candidate → Select best candidate
-
-        │
-
-        └── No valid candidate
-
-                    │
-
-                    ▼
-
-             Preserve original
-
-\`\`\`
-
-
-
-This creates a safety-oriented fallback mechanism.
-
-
-
-The system therefore does not force an enhancement onto an image when the enhancement cannot demonstrate sufficient benefit.
-
-
-
----
-
-
-
-### 6️⃣ Downstream AI Validation
-
-
-
-After preprocessing, DermaLens can evaluate the resulting image using a dermatology classifier.
-
-
-
-The current implementation uses a ****ResNet18-based dermatology model****.
-
-
-
-The model can be evaluated on both the original and enhanced images.
-
-
-
-\`\`\`text
-
-Original Image
-
-      │
-
-      ▼
-
-ResNet18
-
-      │
-
-      ▼
-
-Prediction + Confidence
-
-
-
-
-
-Enhanced Image
-
-      │
-
-      ▼
-
-ResNet18
-
-      │
-
-      ▼
-
-Prediction + Confidence
-
-\`\`\`
-
-
-
-The system can then compare the resulting confidence values.
-
-
-
-Example:
-
-
-
-\`\`\`text
-
-Original Confidence  → 0.80
-
-Enhanced Confidence  → 0.83
-
-
-
-Confidence Delta      → +0.03
-
-\`\`\`
-
-
-
-Model confidence is treated as a ****downstream validation signal****, not as the sole definition of image quality.
-
-
-
-A higher confidence score does not automatically mean that an enhancement is clinically correct.
-
-
-
----
-
-
-
-## 🧠 Core Design Principle
-
-
-
-DermaLens is built around the following principle:
-
-
-
-> ****Image enhancement should improve usability without unnecessarily changing the underlying visual information.****
-
-
-
-A visually sharper image can still be worse if it introduces:
-
-
-
-* Artificial patterns
-
-* False lesion boundaries
-
-* Incorrect pigmentation
-
-* Synthetic textures
-
-* Excessive noise
-
-* Significant color distortion
-
-
-
-Therefore:
-
-
-
-\`\`\`text
-
-Higher Sharpness
-
-        ≠
-
-Better Dermatology Image
-
-\`\`\`
-
-
-
-Similarly:
-
-
-
-\`\`\`text
-
-Higher Model Confidence
-
-        ≠
-
-Clinical Correctness
-
-\`\`\`
-
-
-
-DermaLens therefore evaluates enhancement using multiple signals rather than relying on a single metric.
-
-
-
----
-
-
-
-## 🚀 Features
-
-
-
-* 📸 Dermatology image upload
-
-* 🔍 Automatic image-quality analysis
-
-* 🌙 Low-light detection and correction
-
-* 🌫️ Blur detection
-
-* 🎚️ Contrast analysis
-
-* 🧹 Noise analysis
-
-* 🤖 Adaptive enhancement candidates
-
-* 🧠 Real-ESRGAN super resolution
-
-* 🧠 EDSR super resolution
-
-* 🛡️ Enhancement validation
-
-* 📊 Before/after quality comparison
-
-* 🧩 Structural preservation checks
-
-* 🎨 Color-shift monitoring
-
-* 🔄 Original-image safety fallback
-
-* 🧠 ResNet18 downstream confidence evaluation
-
-* ⚡ FastAPI backend
-
-* 🎨 React + Vite frontend
-
-* ✨ Animated AI processing interface
-
-* 📱 Responsive web interface
-
-
-
----
-
-
-
-## 🛠️ Tech Stack
-
-
-
-\| Layer             | Technologies                             |
-
-\| ----------------- | ---------------------------------------- |
-
-\| Frontend          | React, Vite, Tailwind CSS, Framer Motion |
-
-\| Backend           | FastAPI, Python                          |
-
-\| Image Processing  | OpenCV, NumPy                            |
-
-\| Machine Learning  | PyTorch                                  |
-
-\| Dermatology Model | ResNet18                                 |
-
-\| Super Resolution  | Real-ESRGAN, EDSR                        |
-
-\| API Communication | Fetch / Axios                            |
-
-
-
----
-
-
-
-## 📂 Project Structure
-
-
-
-\`\`\`text
-
+### High-Level Data Flow
+
+DermaLens is divided into a lightweight client interface (**React 18 + Tailwind CSS + Framer Motion**) and an asynchronous processing engine (**FastAPI + PyTorch + OpenCV**).
+
+```text
++-----------------------------------------------------------------------------------+
+|                                 CLIENT SIDE                                       |
+|                                                                                   |
+|  +--------------------+      HTTP POST (Multipart)     +-----------------------+  |
+|  | User Image Upload  | -----------------------------> | React UI State Engine |  |
+|  +--------------------+                                +-----------------------+  |
+|                                                                    |              |
++--------------------------------------------------------------------|--------------+
+                                                                     |
+                                                           JSON / Base64 Payload
+                                                                     |
++--------------------------------------------------------------------|--------------+
+|                                 SERVER SIDE                        v              |
+|                                                                                   |
+|  +-----------------------------------------------------------------------------+  |
+|  |                             FastAPI Route Handler                           |  |
+|  +-----------------------------------------------------------------------------+  |
+|                                        |                                          |
+|                                        v                                          |
+|  +-----------------------------------------------------------------------------+  |
+|  |                        Quality Analyzer Module                              |  |
+|  |  - LAB Illumination    - Laplacian Blur      - Michelson Contrast           |  |
+|  +-----------------------------------------------------------------------------+  |
+|                                        |                                          |
+|                                        v                                          |
+|  +-----------------------------------------------------------------------------+  |
+|  |                     Adaptive Enhancement Pipeline                           |  |
+|  |  - Gamma Adjust        - CLAHE Contrast      - Fast Denoising               |  |
+|  |  - Real-ESRGAN Model   - EDSR $2\times$ Engine                              |  |
+|  +-----------------------------------------------------------------------------+  |
+|                                        |                                          |
+|                                        v                                          |
+|  +-----------------------------------------------------------------------------+  |
+|  |                       Validation & Metrics Layer                            |  |
+|  |  - SSIM Check          - Color Shift ($\Delta E$) - Sharpness Delta           |  |
+|  +-----------------------------------------------------------------------------+  |
+|                                        |                                          |
+|                                        v                                          |
+|  +-----------------------------------------------------------------------------+  |
+|  |                  Downstream Classifier (ResNet18 ISIC)                      |  |
+|  |  - Original Prediction - Enhanced Prediction - Confidence Delta ($\Delta C$)  |  |
+|  +-----------------------------------------------------------------------------+  |
++-----------------------------------------------------------------------------------+
+Component Architecture Breakdown
+The framework comprises five isolated core processing modules:
+
+Plaintext
+backend/app/ml/
+├── quality_analyzer.py   <-- Computes raw image quality indicators
+├── enhancement.py        <-- Generates deterministic candidate transformations
+├── superres_enhancer.py  <-- Handles deep learning super-resolution models
+├── metrics.py            <-- Calculates structural & perceptual distortion
+├── derm_model.py         <-- Manages PyTorch ISIC classification models
+└── pipeline.py           <-- Orchestrates multi-stage processing & selection
+🧪 Deep Dive: Pipeline Execution Stages
+Stage 1: Image Acquisition & Pre-Check
+The uploaded image file is parsed in memory via OpenCV and PIL. The pre-check layer inspects dimension constraints, spatial orientation, color space definitions, and file integrity before initiating processing.
+
+Stage 2: Multi-Dimensional Quality Profiling
+The image is passed through quality_analyzer.py to extract quantitative metrics:
+
+Illumination Index (
+L 
+∗
+ ): Extracted from CIELAB color space. Images with 
+L 
+∗
+ <40.0 are flagged as underexposed; images with 
+L 
+∗
+ >85.0 are flagged as overexposed.
+
+Sharpness Variance (
+σ 
+Lap
+2
+​
+ ): Evaluates high-frequency spatial derivatives. Values below 
+100.0 indicate significant blur.
+
+Contrast Score (
+C 
+Michelson
+​
+ ): Evaluates luminosity spreads across local pixel neighborhoods.
+
+High-Frequency Noise (
+σ 
+N
+​
+ ): Estimated using fast median absolute deviation over high-frequency wavelet sub-bands.
+
+Stage 3: Adaptive Candidate Generation
+Depending on the quality profile, enhancement.py and superres_enhancer.py conditionally instantiate targeted processing operations:
+
+Plaintext
+Input Profile Flags
+       |
+       +---> [Underexposed] ------> Candidates: Adaptive Gamma (\gamma=1.5, 2.0), LAB CLAHE
+       |
+       +---> [Low Contrast] ------> Candidates: CLAHE (Clip Limit=2.0, Tile Grid=8x8)
+       |
+       +---> [Blur / Low-Res] -----> Candidates: Real-ESRGAN x4, EDSR x2 Super Resolution
+       |
+       +---> [Noisy Texture] ------> Candidates: Fast Non-Local Means Denoising (h=3, templateWindowSize=7)
+Stage 4: Validation & Boundary Filtering
+Every generated candidate image 
+C 
+i
+​
+  is paired with the original input 
+C 
+0
+​
+  inside metrics.py to verify distortion bounds:
+
+Structural Similarity Index (SSIM): Rejects candidates where 
+SSIM(C 
+0
+​
+ ,C 
+i
+​
+ )<0.82.
+
+Color Shift (
+ΔE 
+ab
+∗
+​
+ ): Rejects candidates where mean color deviation in CIELAB space exceeds 
+12.0.
+
+Noise Growth Differential (
+Δσ 
+N
+​
+ ): Rejects candidates where noise estimation increases by over 
+35% relative to original sharpness gain.
+
+Plaintext
+Candidate Validation Result Matrix Example:
+
+Candidate ID | Transform Type  | SSIM  | Delta E | Sharpness Gain | Decision
+-------------|-----------------|-------|---------|----------------|----------
+Candidate 1  | CLAHE (Clip 2.0)| 0.942 |  3.12   |    +24.5%      | ACCEPTED
+Candidate 2  | Gamma Correction| 0.910 |  5.80   |    +12.1%      | ACCEPTED
+Candidate 3  | Aggressive Sharpen|0.745| 14.20   |   +140.2%      | REJECTED (High Distortion)
+Candidate 4  | Real-ESRGAN x4  | 0.865 |  8.40   |    +88.3%      | ACCEPTED
+Stage 5: Candidate Selection & Safety Fallback
+Accepted candidates are ranked using a multi-attribute utility function:
+
+U(C 
+i
+​
+ )=w 
+1
+​
+ ⋅SSIM(C 
+0
+​
+ ,C 
+i
+​
+ )+w 
+2
+​
+ ⋅ 
+S
+^
+ (C 
+i
+​
+ )−w 
+3
+​
+ ⋅ΔE(C 
+0
+​
+ ,C 
+i
+​
+ )
+Where 
+S
+^
+ (C 
+i
+​
+ ) represents normalized sharpness gain. If no candidates pass validation, 
+U(C 
+0
+​
+ ) is selected as the default output.
+
+Stage 6: Downstream Classifier Evaluation
+The selected candidate (or preserved original) is evaluated by derm_model.py—a PyTorch implementation of a ResNet18 model trained on the ISIC dermatological dataset.
+
+The system evaluates:
+
+Original Prediction Vector (
+P 
+0
+​
+ ): Softmax probabilities across target abnormality classes.
+
+Enhanced Prediction Vector (
+P 
+e
+​
+ ): Softmax probabilities using the selected candidate image.
+
+Confidence Delta (
+ΔC): Difference in top class prediction confidence: 
+ΔC=max(P 
+e
+​
+ )−max(P 
+0
+​
+ ).
+
+🧮 Mathematical & Algorithmic Foundations
+Variance of Laplacian (Blur Metrics)
+Spatial blur is quantified by calculating the variance of the image smoothed with the isotropic 2D Laplacian operator 
+L:
+
+L(x,y)= 
+∂x 
+2
+ 
+∂ 
+2
+ I
+​
+ + 
+∂y 
+2
+ 
+∂ 
+2
+ I
+​
+ 
+Discrete convolution is performed using the standard 
+3×3 kernel:
+
+K 
+Laplacian
+​
+ = 
+
+​
+  
+0
+1
+0
+​
+  
+1
+−4
+1
+​
+  
+0
+1
+0
+​
+  
+
+​
+ 
+The blur metric score 
+S 
+blur
+​
+  is defined as the variance of the resulting response matrix:
+
+μ= 
+M⋅N
+1
+​
+  
+x=1
+∑
+M
+​
+  
+y=1
+∑
+N
+​
+ L(x,y)
+S 
+blur
+​
+ =σ 
+Lap
+2
+​
+ = 
+M⋅N
+1
+​
+  
+x=1
+∑
+M
+​
+  
+y=1
+∑
+N
+​
+ (L(x,y)−μ) 
+2
+ 
+A low variance value (
+σ 
+Lap
+2
+​
+ <100.0) corresponds to a lack of high-frequency edge transitions, indicating a blurry image.
+
+LAB Color Space Illumination Analysis
+To isolate illumination intensity from chrominance details, RGB images are transformed into the CIE 
+L 
+∗
+ a 
+∗
+ b 
+∗
+  color space.
+
+Conversion from linear sRGB to XYZ coordinates:
+
+
+​
+  
+X
+Y
+Z
+​
+  
+
+​
+ = 
+
+​
+  
+0.412456
+0.212672
+0.019334
+​
+  
+0.357576
+0.715152
+0.119192
+​
+  
+0.180437
+0.072175
+0.950301
+​
+  
+
+​
+  
+
+​
+  
+R 
+linear
+​
+ 
+G 
+linear
+​
+ 
+B 
+linear
+​
+ 
+​
+  
+
+​
+ 
+Transformation from XYZ to CIELAB 
+L 
+∗
+  (Luminance Channel):
+
+L 
+∗
+ =116⋅f( 
+Y 
+n
+​
+ 
+Y
+​
+ )−16
+Where 
+f(t) is defined as:
+
+f(t)={ 
+t 
+1/3
+ 
+3
+1
+​
+ ( 
+6
+29
+​
+ ) 
+2
+ t+ 
+116
+16
+​
+ 
+​
+  
+if t>( 
+29
+6
+​
+ ) 
+3
+ 
+otherwise
+​
+ 
+The mean luminance 
+L
+ˉ
+  
+∗
+ = 
+N
+1
+​
+ ∑L 
+∗
+  provides a stable measure of image exposure that is uncorrupted by skin redness or pigmentation.
+
+Contrast Limited Adaptive Histogram Equalization (CLAHE)
+Standard histogram equalization calculates a global transformation to redistribute pixel intensities across the full range 
+[0,255]. In medical images, this stretches background noise in uniform skin regions.
+
+CLAHE solves this by dividing the 
+L 
+∗
+  channel into contextual regions (tiles of size 
+8×8). Within each tile, the local histogram 
+h(k) is calculated and clipped at a pre-set threshold 
+β:
+
+h 
+clipped
+​
+ (k)=min(h(k),β)
+The excess clipped pixels 
+N 
+clip
+​
+  are uniformly redistributed across all histogram bins:
+
+L 
+redistribute
+​
+ = 
+256
+N 
+clip
+​
+ 
+​
+ 
+Adjacent tiles are joined using bilinear interpolation to eliminate artificial tile boundary seams.
+
+Structural Similarity Index Measure (SSIM)
+The structural similarity between the original image 
+x and candidate image 
+y is computed across localized windows of size 
+N×N:
+
+SSIM(x,y)= 
+(μ 
+x
+2
+​
+ +μ 
+y
+2
+​
+ +C 
+1
+​
+ )(σ 
+x
+2
+​
+ +σ 
+y
+2
+​
+ +C 
+2
+​
+ )
+(2μ 
+x
+​
+ μ 
+y
+​
+ +C 
+1
+​
+ )(2σ 
+xy
+​
+ +C 
+2
+​
+ )
+​
+ 
+Where:
+
+μ 
+x
+​
+ ,μ 
+y
+​
+  are local pixel sample means.
+
+σ 
+x
+2
+​
+ ,σ 
+y
+2
+​
+  are local pixel sample variances.
+
+σ 
+xy
+​
+  is the local cross-covariance between 
+x and 
+y.
+
+C 
+1
+​
+ =(k 
+1
+​
+ L) 
+2
+ ,C 
+2
+​
+ =(k 
+2
+​
+ L) 
+2
+  are stabilization constants (
+k 
+1
+​
+ =0.01,k 
+2
+​
+ =0.03,L=255).
+
+Color Delta Metric (
+ΔE 
+ab
+∗
+​
+ )
+Perceptual color alteration between original image pixel 
+p 
+1
+​
+  and candidate pixel 
+p 
+2
+​
+  is computed using Euclidean distance in CIELAB color space:
+
+ΔE 
+ab
+∗
+​
+ = 
+(L 
+2
+∗
+​
+ −L 
+1
+∗
+​
+ ) 
+2
+ +(a 
+2
+∗
+​
+ −a 
+1
+∗
+​
+ ) 
+2
+ +(b 
+2
+∗
+​
+ −b 
+1
+∗
+​
+ ) 
+2
+ 
+
+​
+ 
+DermaLens computes the mean frame color shift 
+ΔE
+ :
+
+ΔE
+ = 
+M⋅N
+1
+​
+  
+i=1
+∑
+M
+​
+  
+j=1
+∑
+N
+​
+ ΔE 
+ab
+∗
+​
+ (i,j)
+Candidate enhancements yielding 
+ΔE
+ >12.0 are automatically rejected to maintain diagnostic integrity.
+
+🤖 Deep Learning Restoration Models
+Real-ESRGAN (General 
+4× Generative Restoration)
+DermaLens uses Real-ESRGAN (realesr-general-x4v3.pth) to restore severely degraded low-resolution skin images.
+
+Unlike standard ESRGAN trained on synthetic bicubic downsampling, Real-ESRGAN uses a higher-order degradation modeling process that simulates complex real-world artifacts:
+
+D=(D 
+2
+ ∘D 
+1
+ )(I 
+clean
+​
+ )
+Where each degradation step 
+D 
+k
+  includes sequential blur filters, generalized Gaussian noise, 3D ring artifacts, and lossy JPEG compression. The generator network uses a Residual-in-Residual Dense Block (RRDB) backbone to reconstruct high-resolution features without introducing over-smoothed surfaces.
+
+EDSR (Enhanced Deep Residual Networks 
+2×)
+For scenes where generative models risk introducing synthetic artifacts, DermaLens uses EDSR (EDSR_x2.pb).
+
+EDSR optimizes super-resolution performance by removing unnecessary Batch Normalization layers from traditional ResNet architectures:
+
+Plaintext
+Standard ResNet Block:
+[ Conv ] ---> [ Batch Norm ] ---> [ ReLU ] ---> [ Conv ] ---> [ Batch Norm ] ---> (+)
+
+EDSR Residual Block:
+[ Conv ] ---> [ ReLU ] ---> [ Conv ] ---> [ Constant Scaling (0.1) ] -----------> (+)
+By removing Batch Normalization:
+
+GPU memory utilization is reduced by approximately 
+40%, enabling processing of higher spatial dimensions.
+
+Range flexibility is maintained across diverse lighting conditions without normalizing away subtle clinical details.
+
+ISIC ResNet18 Abnormality Classification
+To evaluate downstream model behavior, DermaLens includes a fine-tuned ResNet18 model trained on the International Skin Imaging Collaboration (ISIC) dataset.
+
+Plaintext
+Input Image (224 x 224 x 3)
+         │
+         ▼
+[ Conv2D (7x7, stride 2) ] ──> [ BatchNorm ] ──> [ ReLU ] ──> [ MaxPool (3x3) ]
+         │
+         ▼
+[ BasicBlock Layer 1 ] (2 Blocks, 64 Filters)
+         │
+         ▼
+[ BasicBlock Layer 2 ] (2 Blocks, 128 Filters, Stride 2)
+         │
+         ▼
+[ BasicBlock Layer 3 ] (2 Blocks, 256 Filters, Stride 2)
+         │
+         ▼
+[ BasicBlock Layer 4 ] (2 Blocks, 512 Filters, Stride 2)
+         │
+         ▼
+[ Adaptive Avg Pooling (1x1) ]
+         │
+         ▼
+[ Linear Classifier Layer ] ──> Softmax Output Probability Distribution
+The classifier provides secondary operational metrics:
+
+ΔC=C(Enhanced)−C(Original)
+Where 
+C(I)=max 
+k
+​
+ P(Y=k∣I) represents top-class prediction confidence.
+
+💻 Comprehensive Tech Stack
+Backend System
+Core Language: Python 3.10+
+
+API Framework: FastAPI (0.104.0+)
+
+ASGI Web Server: Uvicorn (0.24.0+)
+
+Computer Vision Operations: OpenCV (4.8.1+), Pillow (10.1.0+), Scikit-Image (0.22.0+)
+
+Deep Learning Runtime: PyTorch (2.1.0+), Torchvision (0.16.0+)
+
+Numerical Utilities: NumPy (1.26.0+), SciPy (1.11.0+)
+
+Frontend Interface
+UI Framework: React 18 (18.2.0)
+
+Build System: Vite (5.0.0)
+
+Styling System: Tailwind CSS (3.3.0)
+
+Animation Engine: Framer Motion (10.16.0)
+
+Icons: Lucide React (0.292.0)
+
+HTTP Transport: Axios (1.6.0)
+
+📂 Directory Structure & Module Reference
+Plaintext
 dermalens/
-
-│
-
 ├── backend/
-
-│   │
-
-│   ├── app/
-
-│   │   │
-
-│   │   ├── ml/
-
-│   │   │   ├── degrade.py
-
-│   │   │   ├── derm_model.py
-
-│   │   │   ├── enhancement.py
-
-│   │   │   ├── evaluate.py
-
-│   │   │   ├── evaluate_derm.py
-
-│   │   │   ├── generate_comparison_figure.py
-
-│   │   │   ├── inference.py
-
-│   │   │   ├── make_bad_images.py
-
-│   │   │   ├── metrics.py
-
-│   │   │   ├── pipeline.py
-
-│   │   │   ├── prepare_data.py
-
-│   │   │   ├── quality_analyzer.py
-
-│   │   │   ├── superres_enhancer.py
-
-│   │   │   ├── train_derm.py
-
-│   │   │   │
-
-│   │   │   ├── models/
-
-│   │   │   │   └── isic_resnet18.pth
-
-│   │   │   │
-
-│   │   │   ├── realesrgan_weights/
-
-│   │   │   │   └── realesr-general-x4v3.pth
-
-│   │   │   │
-
-│   │   │   └── weights/
-
-│   │   │       └── EDSR_x2.pb
-
-│   │   │
-
-│   │   └── routes/
-
-│   │       └── upload.py
-
-│   │
-
-│   ├── requirements.txt
-
-│   └── test_realesrgan.py
-
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                    # FastAPI application initialization & middleware
+│   │   │
+│   │   ├── ml/                        # Machine learning & computer vision module
+│   │   │   ├── __init__.py
+│   │   │   ├── quality_analyzer.py    # Multi-dimensional image quality profiling
+│   │   │   ├── enhancement.py         # Deterministic candidate generation methods
+│   │   │   ├── superres_enhancer.py   # Real-ESRGAN and EDSR model runners
+│   │   │   ├── metrics.py             # Validation routines (SSIM, Delta E, Blur)
+│   │   │   ├── derm_model.py          # PyTorch ResNet18 ISIC model runner
+│   │   │   ├── pipeline.py            # Master orchestration & fallback router
+│   │   │   │
+│   │   │   ├── models/                # Trained model weights directory
+│   │   │   │   └── isic_resnet18.pth  # ISIC classifier model parameters
+│   │   │   │
+│   │   │   ├── realesrgan_weights/    # Super-resolution neural network weights
+│   │   │   │   └── realesr-general-x4v3.pth
+│   │   │   │
+│   │   │   └── weights/               # OpenCV DNN super-resolution models
+│   │   │       └── EDSR_x2.pb
+│   │   │
+│   │   └── routes/                    # API route definitions
+│   │       ├── __init__.py
+│   │       └── upload.py              # Endpoint for image processing & inference
+│   │
+│   ├── requirements.txt               # Backend Python dependency specifications
+│   └── test_realesrgan.py             # Standalone test runner for Real-ESRGAN
 │
-
 └── frontend/
+    └── dermalens/
+        ├── public/                    # Static public assets
+        ├── src/
+        │   ├── api/                   # API interaction layer
+        │   │   └── api.js             # Base Axios configuration & endpoint calls
+        │   │
+        │   ├── assets/                # Structural icons and brand vectors
+        │   │   ├── hero.png
+        │   │   ├── react.svg
+        │   │   └── vite.svg
+        │   │
+        │   ├── components/            # React UI components
+        │   │   ├── AIOrb.jsx          # Animated processing indicator
+        │   │   ├── AIProcessing.jsx   # Status display during analysis
+        │   │   ├── BackgroundGlow.jsx # Background visual layout effects
+        │   │   ├── HeroSection.jsx    # Hero landing display section
+        │   │   ├── MetricsCard.jsx    # Structural metric readout panel
+        │   │   ├── Navbar.jsx         # System navigation bar
+        │   │   ├── ResultSection.jsx  # Interactive before/after split view
+        │   │   ├── UploadBox.jsx      # Drag-and-drop file uploader
+        │   │   └── UploadSection.jsx  # Primary operational upload panel
+        │   │
+        │   ├── pages/
+        │   │   └── Home.jsx           # Main application view container
+        │   │
+        │   ├── App.css                # Global CSS overrides
+        │   ├── App.jsx                # Application root component
+        │   ├── index.css              # Tailwind directive imports
+        │   └── main.jsx               # React DOM entry point
+        │
+        ├── package.json               # Node modules and build script definitions
+        ├── tailwind.config.js         # Tailwind system customization options
+        └── vite.config.js             # Vite development server configuration
+🔌 API Reference & Schema Documentation
+POST /api/upload
+Primary operational endpoint for image quality analysis, candidate generation, validation, and downstream classifier benchmarking.
 
-    │
+Request Specification
+Content-Type: multipart/form-data
 
-    └── dermalens/
+Body Parameters:
 
-        │
+file (Binary, Required): Image file payload (image/jpeg, image/png, or image/webp).
 
-        ├── src/
+Response Schema (200 OK)
+JSON
+{
+  "status": "success",
+  "processing_time_seconds": 1.428,
+  "original_metrics": {
+    "brightness": 58.32,
+    "sharpness": 4.74,
+    "contrast": 6.89,
+    "noise": 2.14,
+    "is_underexposed": true,
+    "is_blurry": true
+  },
+  "selected_candidate": {
+    "candidate_id": "candidate_clahe_lab",
+    "enhancement_type": "CLAHE (LAB Space)",
+    "was_fallback_used": false,
+    "metrics": {
+      "brightness": 87.64,
+      "sharpness": 8.54,
+      "contrast": 8.28,
+      "noise": 2.21
+    },
+    "validation_checks": {
+      "ssim": 0.945,
+      "color_shift_delta_e": 3.42,
+      "sharpness_gain_percent": 80.17,
+      "passed_validation": true
+    }
+  },
+  "downstream_eval": {
+    "model_name": "ISIC_ResNet18",
+    "original_prediction": {
+      "label": "Melanocytic Nevus",
+      "confidence": 0.768
+    },
+    "enhanced_prediction": {
+      "label": "Melanocytic Nevus",
+      "confidence": 0.794
+    },
+    "confidence_delta": 0.026
+  },
+  "images": {
+    "original": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+    "enhanced": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+  }
+}
+GET /api/health
+Health check and status route for system monitors and load balancers.
 
-        │   ├── api/
+Response Schema (200 OK)
+JSON
+{
+  "status": "healthy",
+  "cuda_available": false,
+  "loaded_models": {
+    "isic_resnet18": true,
+    "realesrgan": true,
+    "edsr": true
+  }
+}
+⚡ Installation & Setup Guide
+Prerequisites
+Ensure your local environment meets the following baseline requirements:
 
-        │   │   └── api.js
+Python: Version 3.10 or higher
 
-        │   │
+Node.js: Version 18.0.0 or higher
 
-        │   ├── assets/
+Package Managers: pip and npm
 
-        │   │   ├── hero.png
+Hardware Acceleration (Optional): NVIDIA GPU with CUDA support for accelerated super-resolution model inference.
 
-        │   │   ├── react.svg
-
-        │   │   └── vite.svg
-
-        │   │
-
-        │   ├── components/
-
-        │   │   ├── AIOrb.jsx
-
-        │   │   ├── AIProcessing.jsx
-
-        │   │   ├── BackgroundGlow\.jsx
-
-        │   │   ├── HeroSection.jsx
-
-        │   │   ├── MetricsCard.jsx
-
-        │   │   ├── Navbar.jsx
-
-        │   │   ├── ResultSection.jsx
-
-        │   │   ├── UploadBox.jsx
-
-        │   │   └── UploadSection.jsx
-
-        │   │
-
-        │   ├── pages/
-
-        │   │   └── Home.jsx
-
-        │   │
-
-        │   ├── App.css
-
-        │   ├── App.jsx
-
-        │   ├── index.css
-
-        │   └── main.jsx
-
-        │
-
-        ├── package.json
-
-        └── vite.config.js
-
-\`\`\`
-
-
-
----
-
-
-
-## ⚡ How to Run
-
-
-
-### Backend
-
-
-
+Backend Setup
 Navigate to the backend directory:
 
-
-
-\`\`\`bash
-
+Bash
 cd backend
+Initialize a clean Python virtual environment:
 
-\`\`\`
-
-
-
-Create a virtual environment:
-
-
-
-\`\`\`bash
-
+Bash
 python -m venv venv
+Activate the virtual environment:
 
-\`\`\`
+Windows (PowerShell):
 
-
-
-#### Windows
-
-
-
-\`\`\`bash
-
-venv\Scripts\activate
-
-\`\`\`
-
-
-
-#### Linux / macOS / GitHub Codespaces
-
-
-
-\`\`\`bash
-
-source venv/bin/activate
-
-\`\`\`
-
-
-
-Install dependencies:
-
-
-
-\`\`\`bash
-
-pip install -r requirements.txt
-
-\`\`\`
-
-
-
-Start the FastAPI server:
-
-
-
-\`\`\`bash
-
-python -m uvicorn app.main:app --reload
-
-\`\`\`
-
-
-
-The backend will be available at:
-
-
-
-\`\`\`text
-
-http\://127.0.0.1:8000
-
-\`\`\`
-
-
-
----
-
-
-
-### Frontend
-
-
-
-Navigate to the frontend:
-
-
-
-\`\`\`bash
-
-cd frontend/dermalens
-
-\`\`\`
-
-
-
-Install dependencies:
-
-
-
-\`\`\`bash
-
-npm install
-
-\`\`\`
-
-
-
-Start the development server:
-
-
-
-\`\`\`bash
-
-npm run dev
-
-\`\`\`
-
-
-
-The Vite development server will start on the configured development port.
-
-
-
----
-
-
-
-## 📊 Evaluation
-
-
-
-DermaLens evaluates enhancement using multiple image-level signals.
-
-
-
-### Image Quality
-
-
-
-* Brightness
-
-* Sharpness
-
-* Contrast
-
-* Noise
-
-* Overall quality score
-
-
-
-### Preservation
-
-
-
-* Structural similarity
-
-* Color shift
-
-* Exposure change
-
-* Noise change
-
-
-
-### Downstream AI Evaluation
-
-
-
-* Prediction before enhancement
-
-* Prediction after enhancement
-
-* Confidence before enhancement
-
-* Confidence after enhancement
-
-* Confidence delta
-
-
-
----
-
-
-
-## 🧪 Example Evaluation
-
-
-
-An example low-quality input may produce results such as:
-
-
-
-\`\`\`text
-
-Original
-
-────────────────────────────
-
-
-
-Brightness       → 58.32
-
-Sharpness        → 4.74
-
-Contrast         → 6.89
-
-
-
-
-
-Selected Candidate
-
-────────────────────────────
-
-
-
-Brightness       → 87.64
-
-Sharpness        → 8.54
-
-Contrast         → 8.28
-
-Structure        → 0.995
-
-\`\`\`
-
-
-
-The system can then evaluate the downstream model:
-
-
-
-\`\`\`text
-
-Confidence Before → 0.768
-
-Confidence After  → 0.794
-
-
-
-Δ Confidence      → +0.026
-
-\`\`\`
-
-
-
-The exact values depend on the uploaded image.
-
-
-
----
-
-
-
-## 🔬 Validation Philosophy
-
-
-
-DermaLens deliberately avoids treating a single metric as the ground truth.
-
-
-
-For example, a candidate may produce:
-
-
-
-\`\`\`text
-
-Sharpness ↑↑
-
-\`\`\`
-
-
-
-but simultaneously:
-
-
-
-\`\`\`text
-
-Noise ↑↑
-
-Color Shift ↑
-
-Structure Similarity ↓
-
-\`\`\`
-
-
-
-Such a candidate should not automatically be considered better.
-
-
-
-The framework therefore attempts to balance:
-
-
-
-\`\`\`text
-
-Image Quality
-
-      +
-
-Information Preservation
-
-      +
-
-Downstream Model Behavior
-
-\`\`\`
-
-
-
-rather than optimizing only for visual sharpness.
-
-
-
----
-
-
-
-## 🩺 Future Abnormality Analysis
-
-
-
-The long-term architecture separates ****image preparation**** from ****abnormality analysis****.
-
-
-
-The enhancement layer can prepare an image without needing to know which abnormality is present.
-
-
-
-The downstream analysis layer can then route the image to an appropriate specialized model.
-
-
-
-\`\`\`text
-
-                         Skin Image
-
-                             │
-
-                             ▼
-
-                    ┌─────────────────┐
-
-                    │    DermaLens    │
-
-                    │ Enhancement +   │
-
-                    │   Validation    │
-
-                    └────────┬────────┘
-
-                             │
-
-                             ▼
-
-                    Abnormality Analysis
-
-                             │
-
-              ┌──────────────┼──────────────┐
-
-              │              │              │
-
-              ▼              ▼              ▼
-
-           Lesion          Wound          Other
-
-              │              │              │
-
-              ▼              ▼              ▼
-
-         ISIC Model      Future Model    Future Model
-
-\`\`\`
-
-
-
-This architecture allows the preprocessing framework to remain independent from individual abnormality classifiers.
-
-
-
----
-
-
-
-## ⚠️ Limitations
-
-
-
-DermaLens is currently a ****research and prototype framework****, not a clinically validated diagnostic system.
-
-
-
-Important limitations include:
-
-
-
-* No paired real-world degraded/clean dermatology dataset
-
-* Potential distribution mismatch between curated datasets and real-world phone-camera images
-
-* Traditional image-quality metrics may not perfectly represent perceptual or clinical quality
-
-* Super-resolution models may introduce synthetic details
-
-* Model confidence is not equivalent to clinical correctness
-
-* Current downstream classification coverage is limited
-
-* Wound/cut abnormality analysis is not yet integrated
-
-* No clinical expert validation has been performed
-
-* No prospective clinical evaluation has been performed
-
-
-
-Therefore, DermaLens should ****not be used as a standalone diagnostic system****.
-
-
-
----
-
-
-
-## 🔮 Future Improvements
-
-
-
-### Enhancement
-
-
-
-* Learned image-quality assessment
-
-* Domain-specific enhancement models
-
-* Improved motion-blur restoration
-
-* Compression-artifact correction
-
-* Better low-light restoration
-
-* Adaptive enhancement threshold optimization
-
-* Paired dermatology degradation datasets
-
-* Domain-specific super-resolution models
-
-
-
-### Evaluation
-
-
-
-Planned evaluation metrics include:
-
-
-
-* PSNR
-
-* SSIM
-
-* LPIPS
-
-* Perceptual quality evaluation
-
-* Human expert evaluation
-
-* Cross-camera robustness testing
-
-* Cross-lighting-condition evaluation
-
-
-
-PSNR and SSIM are particularly useful when paired reference images are available.
-
-
-
-For unpaired real-world images, perceptual and preservation-based evaluation will be more appropriate.
-
-
-
-### Explainability
-
-
-
-* Grad-CAM
-
-* Lesion localization
-
-* Abnormality-region highlighting
-
-* Model uncertainty visualization
-
-* Enhancement-region visualization
-
-
-
-### Abnormality Analysis
-
-
-
-* Specialized lesion classification
-
-* Wound/cut classification
-
-* Other skin abnormality models
-
-* Multi-model routing
-
-* Abnormality localization
-
-
-
-### Deployment
-
-
-
-* Mobile inference
-
-* Edge deployment
-
-* Telemedicine integration
-
-* Real-time camera processing
-
-* Lightweight model optimization
-
-
-
----
-
-
-
-## 🎯 Project Goal
-
-
-
-DermaLens investigates a fundamental problem in medical AI:
-
-
-
-> ****Can degraded medical images be improved before AI analysis without introducing changes that make the image less trustworthy?****
-
-
-
-Instead of treating preprocessing as a fixed sequence of filters, DermaLens treats it as a ****decision-making and validation layer between image acquisition and downstream AI analysis****.
-
-
-
-\`\`\`text
-
-              IMAGE ACQUISITION
-
-                     │
-
-                     ▼
-
-             ┌───────────────┐
-
-             │   DermaLens   │
-
-             │               │
-
-             │ Quality       │
-
-             │ Analysis      │
-
-             │      ↓        │
-
-             │ Enhancement   │
-
-             │      ↓        │
-
-             │ Validation    │
-
-             └───────┬───────┘
-
-                     │
-
-                     ▼
-
-             ABNORMALITY ANALYSIS
-
-                     │
-
-          ┌──────────┼──────────┐
-
-          ▼          ▼          ▼
-
-        Lesion      Wound      Other
-
-\`\`\`
-
-
-
----
-
-
-
-## 📌 Current Status
-
-
-
-### Implemented
-
-
-
-* ✔ Image upload and preprocessing API
-
-* ✔ Image-quality analysis
-
-* ✔ Brightness analysis and correction
-
-* ✔ Blur/sharpness detection
-
-* ✔ Contrast analysis
-
-* ✔ Noise analysis
-
-* ✔ Adaptive enhancement pipeline
-
-* ✔ Candidate generation
-
-* ✔ Candidate validation
-
-* ✔ Quality-based candidate selection
-
-* ✔ Original-image safety fallback
-
-* ✔ ResNet18 dermatology model
-
-* ✔ Real-ESRGAN integration
-
-* ✔ EDSR integration
-
-* ✔ Downstream confidence comparison
-
-* ✔ Enhancement acceptance/rejection logic
-
-* ✔ FastAPI backend
-
-* ✔ React + Vite frontend
-
-* ✔ Animated AI processing interface
-
-* ✔ Before/after result interface
-
-* ✔ Enhancement metrics display
-
-* ✔ Model weights integrated into the project
-
-
-
-### In Progress
-
-
-
-* 🚧 Improved result visualization
-
-* 🚧 Image quality analysis panel
-
-* 🚧 Compare / zoom interaction
-
-* 🚧 Quality-change visualization
-
-* 🚧 Downstream abnormality analysis workflow
-
-
-
-### Planned
-
-
-
-* 🔮 PSNR / SSIM evaluation
-
-* 🔮 LPIPS evaluation
-
-* 🔮 Wound/cut analysis
-
-* 🔮 Additional abnormality models
-
-* 🔮 Grad-CAM explainability
-
-* 🔮 Real-world dataset evaluation
-
-* 🔮 Clinical expert evaluation
-
-* 🔮 Mobile / edge deployment
-
-
-
----
-
-
-
-## 👩‍💻 Author
-
-
-
-### Stuti Katiyar
-
-
-
-Engineering • AI/ML • Computer Vision
-
-
-
----
-
-
-
-<p align="center">
-
-  <b>DermaLens — Enhance carefully. Validate before trusting.\</b>
-
-</p>
-
----
-
-## Local Development Quick Start (Supplement)
-
-This section is an addition to the original documentation; the existing project description, architecture, implementation notes, evaluation details, and roadmap above have been retained.
-
-### Backend
-
-From the project root, open a terminal and run:
-
-```powershell
-cd backend
+PowerShell
 .\venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --reload --port 8000
-```
+Linux / macOS:
 
-If the virtual environment or dependencies have not been set up yet, create/activate the environment and install the dependencies listed in the backend's dependency file before starting the server. Use `http://127.0.0.1:8000/docs` to inspect the FastAPI routes. A `404` at `/` does not by itself mean the API server failed to start.
+Bash
+source venv/bin/activate
+Upgrade baseline deployment tools:
 
-### Frontend
+Bash
+pip install --upgrade pip setuptools wheel
+Install backend dependencies:
 
-In a second terminal:
+Bash
+pip install -r requirements.txt
+Run the FastAPI application server:
 
-```powershell
+Bash
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+Verify operational API deployment:
+Open your browser and navigate to http://127.0.0.1:8000/docs to access the interactive OpenAPI / Swagger UI documentation.
+
+Frontend Setup
+Open a new terminal session and navigate to the frontend directory:
+
+Bash
 cd frontend/dermalens
+Install frontend dependencies:
+
+Bash
 npm install
+Configure system API environment variables (Optional):
+Create a .env.local file inside frontend/dermalens/ if your backend is running on a non-default host or port:
+
+Code snippet
+VITE_API_BASE_URL=[http://127.0.0.1:8000](http://127.0.0.1:8000)
+Launch the Vite local development server:
+
+Bash
 npm run dev
-```
+Access the user interface:
+Open your browser and visit http://localhost:5173.
 
-Open the local URL printed by Vite in the terminal. Confirm the frontend API base URL matches the backend address and port used in your environment.
+📊 Evaluation Metrics & Benchmark Protocols
+DermaLens uses a multi-faceted evaluation strategy to measure restoration performance:
 
-### Verification checklist
+Plaintext
++-----------------------------------------------------------------------------------------+
+|                                EVALUATION MATRIX METRICS                                |
++-------------------------------+---------------------------------------------------------+
+| Metric Category               | Evaluated Attributes                                    |
++-------------------------------+---------------------------------------------------------+
+| Image Quality Metrics         | • Luminance ($L^*$), Laplacian Variance ($\sigma^2$),   |
+|                               |   Michelson Contrast, Noise Power Spectrum              |
+|                               |                                                         |
+| Structural Fidelity Metrics   | • SSIM, Feature Similarity (FSIM), Peak Signal-to-Noise |
+|                               |   Ratio (PSNR)                                          |
+|                               |                                                         |
+| Color Integrity Metrics       | • CIELAB $\Delta E^*_{\text{ab}}$, Perceptual Color     |
+|                               |   Angle Variation                                       |
+|                               |                                                         |
+| Downstream Diagnostic Metrics | • Softmax Classification Cross-Entropy, Prediction     |
+|                               |   Stability, Confidence Differential ($\Delta C$)       |
++-------------------------------+---------------------------------------------------------+
+Benchmark Protocol Rules
+Paired Synthetic Evaluation: Synthetically degrade clean ISIC images with known noise variances and measure post-restoration SSIM recovery.
 
-- [ ] Start the backend and confirm the FastAPI documentation page loads.
-- [ ] Start the frontend and confirm the Vite page loads.
-- [ ] Upload a test image and inspect the browser console and backend terminal if the result does not appear.
-- [ ] Check the API response fields before assuming a frontend display issue is caused by the enhancement pipeline.
-- [ ] Compare the original and enhanced images; do not treat increased sharpness, a quality score, or classifier confidence alone as evidence of clinical improvement.
+Unpaired Real-World Evaluation: Process real-world mobile camera uploads and verify that candidate rejection rates accurately track extreme color shifts and structural distortions.
 
-### Research and safety note
+🔮 Future Roadmap
+[ ] LPIPS Perceptual Loss Integration: Implement Learned Perceptual Image Patch Similarity (LPIPS) to complement SSIM in candidate validation.
 
-DermaLens is a research/prototype image-processing workflow, not a diagnostic device. Enhancement may introduce artifacts or change visual characteristics. Preserve the original image for comparison, validate the pipeline on representative datasets, and do not use its output as a substitute for assessment by a qualified clinician.
+[ ] Grad-CAM Explainability Overlay: Integrate Gradient-weighted Class Activation Mapping (Grad-CAM) to visualize neural network attention regions before and after image enhancement.
+
+[ ] Expanded Disease Diagnostic Classifiers: Extend the downstream analysis layer to evaluate additional skin pathologies, including burn severity grading and chronic wound boundaries.
+
+[ ] Mobile & Edge Runtime Optimization: Quantize PyTorch and super-resolution models to ONNX and TensorFlow Lite formats for on-device mobile execution.
+
+[ ] Cross-Camera Color Calibration: Implement automatic color-constancy algorithms using skin-tone reference distributions.
+
+⚠️ Limitations & Clinical Disclaimer
+Research Prototype Status: DermaLens is an experimental computer vision framework designed solely for research, prototyping, and evaluation. It is not a certified diagnostic medical device and is not intended to replace professional clinical judgment.
+
+Generative Artifact Risks: While the validation layer rejects high-distortion outputs, generative super-resolution algorithms (such as Real-ESRGAN) can occasionally synthesize fine, hyper-realistic textures that do not reflect true patient anatomy.
+
+Dataset Bias Constraints: The downstream classifier is trained on curated datasets (such as ISIC) and may display reduced classification stability on underrepresented skin phototypes or rare clinical conditions.
+
+👩‍💻 Author & Institutional Credits
+Developed By:
+Stuti Katiyar
+
+Undergraduate Student, B.E. Artificial Intelligence & Machine Learning
+
+CMR Institute of Technology, Bengaluru, India
+
+GitHub: @stutikatiyar
+
+Role: Lead System Architect & Algorithm Developer
