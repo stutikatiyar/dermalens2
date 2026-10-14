@@ -1,76 +1,133 @@
+
+import { useEffect, useState } from "react";
+
+function navigate(path) {
+  window.history.pushState({}, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 function Navbar() {
+  const [currentPath, setCurrentPath] = useState(
+    window.location.pathname.replace(/\/$/, "") || "/"
+  );
+
+  useEffect(() => {
+    const handleNavigation = () => {
+      setCurrentPath(
+        window.location.pathname.replace(/\/$/, "") || "/"
+      );
+    };
+
+    window.addEventListener("popstate", handleNavigation);
+    return () => window.removeEventListener("popstate", handleNavigation);
+  }, []);
+
+  const handleNavigation = (e, path) => {
+    e.preventDefault();
+
+    if (path !== currentPath) {
+      navigate(path);
+    }
+  };
+
+  const handleHowItWorks = () => {
+    if (currentPath !== "/") {
+      navigate("/");
+      window.setTimeout(() => {
+        document.getElementById("how-it-works")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 500);
+      return;
+    }
+
+    document.getElementById("how-it-works")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const linkClass = (path) =>
+    `transition ${
+      currentPath === path
+        ? "text-white"
+        : "text-slate-400 hover:text-white"
+    }`;
+
   return (
-
-    <nav className="w-full bg-[#020617]/60 backdrop-blur-2xl sticky top-0 z-50 border-b border-cyan-500/10">
-
-      <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-
-          <div className="h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.9)] animate-pulse" />
-
+    <nav className="sticky top-0 z-50 w-full border-b border-cyan-500/10 bg-[#020617]/75 backdrop-blur-2xl">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-5">
+        <a
+          href="/"
+          onClick={(e) => handleNavigation(e, "/")}
+          className="flex shrink-0 items-center gap-3"
+        >
+          <div className="h-3 w-3 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.9)]" />
           <h1 className="text-xl font-semibold tracking-tight text-white">
-
             DermaLens
-
           </h1>
-
-          <span className="text-xs px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">
-
+          <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 font-mono text-xs text-cyan-300">
             AI
-
           </span>
+        </a>
 
-        </div>
-
-        {/* Right Side */}
-        <div className="flex items-center gap-8 text-sm text-slate-400 font-medium">
-
-          {/* AI Status */}
-          <div className="hidden md:flex items-center gap-2 text-cyan-300">
-
-            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-
-            <span>
-
-              AI Restoration Active
-
-            </span>
-
+        <div className="flex items-center gap-4 text-sm font-medium md:gap-7">
+          <div className="hidden items-center gap-2 text-cyan-300 lg:flex">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+            <span>AI Restoration Active</span>
           </div>
 
-          {/* Links */}
-          <span className="hover:text-white transition cursor-pointer">
+          <a
+            href="/"
+            onClick={(e) => handleNavigation(e, "/")}
+            className={linkClass("/")}
+          >
+            Analyze
+          </a>
 
-            Research
-
-          </span>
-
-          <span className="hover:text-white transition cursor-pointer">
-
-            <a
-                href="https://github.com/stutikatiyar/dermalens"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-white transition cursor-pointer"
-              >
-                GitHub
-            </a>
-
-          </span>
-
-          {/* CTA */}
-          <button className="px-5 py-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:scale-105 transition-all duration-300 shadow-[0_0_30px_rgba(34,211,238,0.25)]">
-
-            Launch Demo
-
+          <button
+            type="button"
+            onClick={handleHowItWorks}
+            className="whitespace-nowrap text-slate-400 transition hover:text-cyan-300"
+          >
+            How It Works
           </button>
 
+          <a
+            href="/evaluation"
+            onClick={(e) => handleNavigation(e, "/evaluation")}
+            className={linkClass("/evaluation")}
+          >
+            Evaluation
+          </a>
+
+          <a
+            href="/milestones"
+            onClick={(e) => handleNavigation(e, "/milestones")}
+            className={linkClass("/milestones")}
+          >
+            Milestones
+          </a>
+
+          <a
+            href="https://github.com/stutikatiyar/dermalens"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden text-slate-400 transition hover:text-white sm:block"
+          >
+            GitHub
+          </a>
+
+          <a
+            href="/"
+            onClick={(e) => handleNavigation(e, "/")}
+            className="whitespace-nowrap rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-white shadow-[0_0_30px_rgba(34,211,238,0.25)] transition-all duration-300 hover:scale-105 md:px-5"
+          >
+            Launch Demo
+          </a>
         </div>
-
       </div>
-
     </nav>
   );
 }
