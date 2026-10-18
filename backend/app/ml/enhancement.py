@@ -1,4 +1,4 @@
-from app.ml.superres_enhancer import enhance_superres
+from app.ml.superres_enhancer import enhance_superres, get_last_method_info
 import cv2
 import numpy as np
 
@@ -312,15 +312,26 @@ def generate_enhancement_candidates(image):
         # NO extra artificial sharpening.
         sr_candidate = enhance_superres(
             original,
-            sharpen=False,
-            sharpen_strength=0.0
+            sharpen=True,
+            sharpen_strength=0.10,
+            denoise_strength=0.0,
+            use_realesrgan=False,
         )
+
+        sr_info = get_last_method_info()
+        if sr_info.get("used_neural_model"):
+            sr_mode = "EDSR Super Resolution x2 (severe blur)"
+            sr_reason = "EDSR x2 model used for severe blur"
+        else:
+            sr_mode = "Adaptive Full-Resolution Enhancement (severe blur)"
+            sr_reason = "Adaptive fallback used for severe blur"
 
         candidates.append(
             {
                 "image": sr_candidate,
-                "mode": "AI Super Resolution (severe blur)",
-                "reason": "Severe blur detected"
+                "mode": sr_mode,
+                "reason": sr_reason,
+                "method_info": sr_info,
             }
         )
 
@@ -332,11 +343,19 @@ def generate_enhancement_candidates(image):
             sharpen_strength=0.20
         )
 
+        sr_info = get_last_method_info()
+        sr_mode = (
+            "EDSR Super Resolution x2 (moderate blur)"
+            if sr_info.get("used_neural_model")
+            else "Adaptive Full-Resolution Enhancement (moderate blur)"
+        )
+
         candidates.append(
             {
                 "image": sr_candidate,
-                "mode": "AI Super Resolution (moderate blur)",
-                "reason": "Moderate blur detected"
+                "mode": sr_mode,
+                "reason": "Moderate blur detected",
+                "method_info": sr_info,
             }
         )
 
@@ -348,11 +367,19 @@ def generate_enhancement_candidates(image):
             sharpen_strength=0.15
         )
 
+        sr_info = get_last_method_info()
+        sr_mode = (
+            "EDSR Super Resolution x2 (mild blur)"
+            if sr_info.get("used_neural_model")
+            else "Adaptive Full-Resolution Enhancement (mild blur)"
+        )
+
         candidates.append(
             {
                 "image": sr_candidate,
-                "mode": "AI Super Resolution (mild blur)",
-                "reason": "Mild blur detected"
+                "mode": sr_mode,
+                "reason": "Mild blur detected",
+                "method_info": sr_info,
             }
         )
 
@@ -391,16 +418,19 @@ def generate_enhancement_candidates(image):
             sharpen_strength=0.0
         )
 
+        sr_info = get_last_method_info()
+        combined_mode = (
+            "Brightness Enhanced + EDSR Super Resolution x2"
+            if sr_info.get("used_neural_model")
+            else "Brightness Enhanced + Adaptive Full-Resolution Enhancement"
+        )
+
         candidates.append(
             {
                 "image": combined,
-                "mode": (
-                    "Brightness Enhanced + "
-                    "AI Super Resolution"
-                ),
-                "reason": (
-                    "Low brightness and blur detected"
-                )
+                "mode": combined_mode,
+                "reason": "Low brightness and blur detected",
+                "method_info": sr_info,
             }
         )
 

@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import cv2
+import time
 import numpy as np
 
 
@@ -29,9 +30,10 @@ REALESRGAN_WEIGHTS_PATH = (
 # PERFORMANCE
 # --------------------------------------------------
 
-# EDSR is expensive on CPU.
-# Only use it directly for genuinely small images.
-MAX_EDSR_SIZE = 128
+# Allow EDSR on typical smartphone images while keeping a safety
+# limit for unusually large uploads. EDSR x2 increases each dimension
+# by 2, so output pixel count is approximately 4x the input.
+MAX_EDSR_SIZE = 512
 
 
 # Real-ESRGAN is deliberately NOT used automatically.
@@ -509,151 +511,107 @@ def _realesrgan_enhancement(
 # ADAPTIVE SUPER RESOLUTION
 # --------------------------------------------------
 
+_LAST_METHOD_INFO = {
+    "method": "not_run",
+    "used_neural_model": False,
+    "input_size": None,
+    "output_size": None,
+    "elapsed_ms": None,
+}
+
+
+def get_last_method_info():
+    """Return metadata describing the most recent enhancement call."""
+    return dict(_LAST_METHOD_INFO)
+
+
 def enhance_superres(
     image,
     sharpen=True,
     sharpen_strength=0.10,
     denoise_strength=0.0,
-    use_realesrgan=False
+    use_realesrgan=False,
+    force_edsr=False,
 ):
     """
-    Adaptive enhancement.
+    Return an enhanced image while recording the actual method used.
 
-    Small images:
-        EDSR x2 with conservative blending.
-
-    Large images:
-        Full-resolution adaptive CLAHE,
-        optional denoising,
-        very mild sharpening.
-
-    Real-ESRGAN:
-        Available as an explicit candidate,
-        but disabled by default.
-
-    The original image is never aggressively replaced.
+    The default keeps the existing CPU safeguard. Set force_edsr=True only
+    for a deliberate experiment; EDSR may be slow on CPU and cannot guarantee
+    recovery of details absent from the input.
     """
+    global _LAST_METHOD_INFO
 
     if image is None:
-
-        raise ValueError(
-            "enhance_superres received None image."
-        )
-
+        raise ValueError("enhance_superres received None image.")
     if image.dtype != np.uint8:
+        image = np.clip(image, 0, 255).astype(np.uint8)
 
-        image = image.astype(
-            np.uint8
-        )
-
+    started = time.perf_counter()
     h, w = image.shape[:2]
-
-    print(
-        f"SR → original size: {w}x{h}"
-    )
-
-    longest_side = max(
-        h,
-        w
-    )
-
-    # --------------------------------------------------
-    # OPTIONAL REAL-ESRGAN
-    # --------------------------------------------------
+    longest_side = max(h, w)
+    input_size = f"{w}x{h}"
 
     if use_realesrgan:
-
+        print("SR -> using Real-ESRGAN candidate")
+        result = _realesrgan_enhancement(image, outscale=2)
+        method, used_neural_model = "Real-ESRGAN", True
+    elif longest_side <= MAX_EDSR_SIZE or force_edsr:
         print(
-            "SR → using Real-ESRGAN candidate"
+            f"SR -> attempting EDSR x2 for {input_size} "
+            f"(CPU safety limit={MAX_EDSR_SIZE}px, force_edsr={force_edsr})"
         )
-
-        return _realesrgan_enhancement(
-            image,
-            outscale=2
-        )
-
-    # --------------------------------------------------
-    # SMALL IMAGE → EDSR
-    # --------------------------------------------------
-
-    if longest_side <= MAX_EDSR_SIZE:
-
-        print(
-            "SR → using adaptive EDSR"
-        )
-
-        return _edsr_enhancement(
-            image,
-            sharpen=sharpen,
-            sharpen_strength=min(
-                sharpen_strength,
-                0.15
+        try:
+            result = _edsr_enhancement(
+                image,
+                sharpen=sharpen,
+                sharpen_strength=min(max(sharpen_strength, 0.0), 0.15),
             )
+            method, used_neural_model = "EDSR x2", True
+        except Exception as exc:
+            # Keep uploads working if the model file, OpenCV DNN, or CPU
+            # inference fails. Do not label the fallback as neural SR.
+            print(f"SR -> EDSR failed; using adaptive fallback: {exc}")
+            adaptive_strength = float(
+                np.clip(enhancement_strength_from_image(image), 0.10, 0.30)
+            )
+            adaptive_sharpen = min(max(sharpen_strength, 0.0), 0.12) if sharpen else 0.0
+            adaptive_denoise = min(max(denoise_strength, 0.0), 0.40)
+            result = _lightweight_enhancement(
+                image,
+                enhancement_strength=adaptive_strength,
+                sharpen_strength=adaptive_sharpen,
+                denoise_strength=adaptive_denoise,
+            )
+            method, used_neural_model = "Adaptive Full-Resolution Enhancement (EDSR fallback)", False
+    else:
+        print(
+            f"SR -> EDSR skipped for {input_size}; "
+            f"CPU safety limit is {MAX_EDSR_SIZE}px"
         )
-
-    # --------------------------------------------------
-    # LARGE IMAGE → FULL RESOLUTION
-    # --------------------------------------------------
-
-    print(
-        "SR → image too large for CPU EDSR"
-    )
-
-    print(
-        "SR → using adaptive full-resolution enhancement"
-    )
-
-    # --------------------------------------------------
-    # ADAPTIVE STRENGTH
-    # --------------------------------------------------
-
-    adaptive_strength = float(
-        np.clip(
-            enhancement_strength_from_image(
-                image
-            ),
-            0.10,
-            0.30
+        print("SR -> using adaptive full-resolution enhancement (not neural SR)")
+        adaptive_strength = float(
+            np.clip(enhancement_strength_from_image(image), 0.10, 0.30)
         )
-    )
+        adaptive_sharpen = min(max(sharpen_strength, 0.0), 0.12) if sharpen else 0.0
+        adaptive_denoise = min(max(denoise_strength, 0.0), 0.40)
+        result = _lightweight_enhancement(
+            image,
+            enhancement_strength=adaptive_strength,
+            sharpen_strength=adaptive_sharpen,
+            denoise_strength=adaptive_denoise,
+        )
+        method, used_neural_model = "Adaptive Full-Resolution Enhancement", False
 
-    adaptive_sharpen = min(
-        max(
-            sharpen_strength,
-            0.0
-        ),
-        0.12
-    )
-
-    adaptive_denoise = min(
-        max(
-            denoise_strength,
-            0.0
-        ),
-        0.40
-    )
-
-    print(
-        f"SR → contrast strength: "
-        f"{adaptive_strength:.2f}"
-    )
-
-    print(
-        f"SR → sharpen strength: "
-        f"{adaptive_sharpen:.2f}"
-    )
-
-    print(
-        f"SR → denoise strength: "
-        f"{adaptive_denoise:.2f}"
-    )
-
-    return _lightweight_enhancement(
-        image,
-        enhancement_strength=adaptive_strength,
-        sharpen_strength=adaptive_sharpen,
-        denoise_strength=adaptive_denoise
-    )
+    _LAST_METHOD_INFO = {
+        "method": method,
+        "used_neural_model": used_neural_model,
+        "input_size": input_size,
+        "output_size": f"{result.shape[1]}x{result.shape[0]}",
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+    }
+    print("SR -> method metadata:", _LAST_METHOD_INFO)
+    return result
 
 
 # --------------------------------------------------

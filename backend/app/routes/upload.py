@@ -1,5 +1,3 @@
-
-
 import os
 
 import base64
@@ -8,13 +6,11 @@ import cv2
 
 import numpy as np
 
-
-
 from fastapi import APIRouter, UploadFile, File
 
-
-
 from app.ml.enhancement import enhance_image
+
+from time import perf_counter
 
 from app.ml.metrics import (
 
@@ -32,10 +28,7 @@ from app.ml.metrics import (
 
 from app.ml.derm_model import load_model, predict
 
-
 from app.ml.lesion_segmenter import segment_lesion
-
-
 
 from app.ml.lesion_aware import (
 
@@ -45,23 +38,24 @@ from app.ml.lesion_aware import (
 
 )
 
+from pathlib import Path
+import cv2
 
+DEBUG_DIR = Path("debug_images")
+DEBUG_DIR.mkdir(exist_ok=True)
 
-
+def save_debug_image(name, image):
+    path = DEBUG_DIR / f"{name}.png"
+    cv2.imwrite(str(path), image)
+    print(f"DEBUG IMAGE SAVED: {path.resolve()}")
 
 router = APIRouter()
-
-
-
-
 
 # --------------------------------------------------
 
 # MODEL
 
 # --------------------------------------------------
-
-
 
 _APP_DIR = os.path.dirname(
 
@@ -72,8 +66,6 @@ _APP_DIR = os.path.dirname(
     )
 
 )
-
-
 
 _WEIGHTS_PATH = os.path.join(
 
@@ -87,13 +79,7 @@ _WEIGHTS_PATH = os.path.join(
 
 )
 
-
-
 _model = load_model(_WEIGHTS_PATH)
-
-
-
-
 
 # --------------------------------------------------
 
@@ -101,17 +87,11 @@ _model = load_model(_WEIGHTS_PATH)
 
 # --------------------------------------------------
 
-
-
 # For normal/acceptable exposure images, enhancement
 
 # should demonstrate a meaningful improvement.
 
 MIN_QUALITY_IMPROVEMENT = 0.02
-
-
-
-
 
 # Prevent enhancement from creating an extreme
 
@@ -119,19 +99,11 @@ MIN_QUALITY_IMPROVEMENT = 0.02
 
 MAX_SHARPNESS_MULTIPLIER = 4.0
 
-
-
-
-
 # Prevent aggressive brightening from blowing out
 
 # the image.
 
 MAX_ACCEPTABLE_BRIGHTNESS = 220.0
-
-
-
-
 
 # --------------------------------------------------
 
@@ -155,13 +127,7 @@ MAX_ACCEPTABLE_BRIGHTNESS = 220.0
 
 #
 
-
-
-
-
 def predict_confidence(image_np):
-
-
 
     _, confidence = predict(
 
@@ -171,13 +137,7 @@ def predict_confidence(image_np):
 
     )
 
-
-
     return float(confidence)
-
-
-
-
 
 # --------------------------------------------------
 
@@ -185,21 +145,15 @@ def predict_confidence(image_np):
 
 # --------------------------------------------------
 
-
-
 def calculate_noise_estimate(image):
 
     """
 
    Estimate high-frequency noise.
 
-
-
    This is intentionally used as a supporting signal,
 
    NOT as an absolute noise detector.
-
-
 
    A sudden large increase in high-frequency energy
 
@@ -209,8 +163,6 @@ def calculate_noise_estimate(image):
 
    """
 
-
-
     gray = cv2.cvtColor(
 
         image,
@@ -218,8 +170,6 @@ def calculate_noise_estimate(image):
         cv2.COLOR_BGR2GRAY
 
     )
-
-
 
     median = cv2.medianBlur(
 
@@ -229,8 +179,6 @@ def calculate_noise_estimate(image):
 
     )
 
-
-
     residual = cv2.absdiff(
 
         gray,
@@ -239,17 +187,11 @@ def calculate_noise_estimate(image):
 
     )
 
-
-
     return float(
 
         np.mean(residual)
 
     )
-
-
-
-
 
 def calculate_color_shift(
 
@@ -265,23 +207,15 @@ def calculate_color_shift(
 
    and enhanced image.
 
-
-
    Small changes are expected from brightness/contrast
 
    correction.
-
-
 
    Large changes can indicate aggressive processing.
 
    """
 
-
-
     if original.shape != enhanced.shape:
-
-
 
         enhanced_resized = cv2.resize(
 
@@ -299,15 +233,9 @@ def calculate_color_shift(
 
         )
 
-
-
     else:
 
-
-
         enhanced_resized = enhanced
-
-
 
     original_lab = cv2.cvtColor(
 
@@ -317,8 +245,6 @@ def calculate_color_shift(
 
     )
 
-
-
     enhanced_lab = cv2.cvtColor(
 
         enhanced_resized,
@@ -326,8 +252,6 @@ def calculate_color_shift(
         cv2.COLOR_BGR2LAB
 
     )
-
-
 
     diff = cv2.absdiff(
 
@@ -337,17 +261,11 @@ def calculate_color_shift(
 
     )
 
-
-
     return float(
 
         np.mean(diff)
 
     )
-
-
-
-
 
 def calculate_structure_similarity(
 
@@ -361,11 +279,7 @@ def calculate_structure_similarity(
 
    Simple structure-preservation measure.
 
-
-
    This is not SSIM.
-
-
 
    It measures normalized grayscale correlation
 
@@ -373,17 +287,11 @@ def calculate_structure_similarity(
 
    resizing the enhanced image back to original size.
 
-
-
    Higher is better.
 
    """
 
-
-
     if original.shape != enhanced.shape:
-
-
 
         enhanced_resized = cv2.resize(
 
@@ -401,15 +309,9 @@ def calculate_structure_similarity(
 
         )
 
-
-
     else:
 
-
-
         enhanced_resized = enhanced
-
-
 
     original_gray = cv2.cvtColor(
 
@@ -419,8 +321,6 @@ def calculate_structure_similarity(
 
     ).astype(np.float32)
 
-
-
     enhanced_gray = cv2.cvtColor(
 
         enhanced_resized,
@@ -428,8 +328,6 @@ def calculate_structure_similarity(
         cv2.COLOR_BGR2GRAY
 
     ).astype(np.float32)
-
-
 
     original_flat = (
 
@@ -439,8 +337,6 @@ def calculate_structure_similarity(
 
     )
 
-
-
     enhanced_flat = (
 
         enhanced_gray -
@@ -448,8 +344,6 @@ def calculate_structure_similarity(
         np.mean(enhanced_gray)
 
     )
-
-
 
     denominator = (
 
@@ -477,15 +371,9 @@ def calculate_structure_similarity(
 
     )
 
-
-
     if denominator == 0:
 
-
-
         return 1.0
-
-
 
     correlation = (
 
@@ -503,8 +391,6 @@ def calculate_structure_similarity(
 
     )
 
-
-
     return float(
 
         np.clip(
@@ -519,17 +405,11 @@ def calculate_structure_similarity(
 
     )
 
-
-
-
-
 # --------------------------------------------------
 
 # CANDIDATE VALIDATION
 
 # --------------------------------------------------
-
-
 
 def evaluate_candidate(
 
@@ -545,17 +425,11 @@ def evaluate_candidate(
 
    Evaluate one enhancement candidate.
 
-
-
    The candidate is judged using image-quality signals,
 
    NOT classifier confidence.
 
-
-
    The goal is:
-
-
 
        clearer
 
@@ -565,11 +439,7 @@ def evaluate_candidate(
 
        more useful detail
 
-
-
    WITHOUT:
-
-
 
        excessive sharpening
 
@@ -583,15 +453,11 @@ def evaluate_candidate(
 
    """
 
-
-
     # --------------------------------------------------
 
     # ORIGINAL METRICS
 
     # --------------------------------------------------
-
-
 
     sharp_before = calculate_sharpness(
 
@@ -599,23 +465,17 @@ def evaluate_candidate(
 
     )
 
-
-
     contrast_before = calculate_contrast(
 
         original
 
     )
 
-
-
     brightness_before = calculate_brightness(
 
         original
 
     )
-
-
 
     quality_before = quality_score(
 
@@ -627,79 +487,49 @@ def evaluate_candidate(
 
     )
 
-
-
     noise_before = calculate_noise_estimate(
 
         original
 
     )
 
-
-
     # --------------------------------------------------
 
-    # CANDIDATE METRICS
-
+    # CANDIDATE METRICS (RESOLUTION-NORMALIZED)
     # --------------------------------------------------
+    # Compare candidates at the original resolution. This prevents a 2x
+    # EDSR output from receiving misleading metric values just because it
+    # has more pixels. The original `candidate` remains unchanged for output.
 
+    original_height, original_width = original.shape[:2]
+    if candidate.shape[:2] != original.shape[:2]:
+        candidate_for_metrics = cv2.resize(
+            candidate,
+            (original_width, original_height),
+            interpolation=cv2.INTER_AREA
+        )
+        print(
+            "METRICS -> normalized candidate resolution:",
+            f"{candidate.shape[1]}x{candidate.shape[0]}",
+            "->",
+            f"{original_width}x{original_height}"
+        )
+    else:
+        candidate_for_metrics = candidate
 
-
-    sharp_after = calculate_sharpness(
-
-        candidate
-
-    )
-
-
-
-    contrast_after = calculate_contrast(
-
-        candidate
-
-    )
-
-
-
-    brightness_after = calculate_brightness(
-
-        candidate
-
-    )
-
-
-
+    sharp_after = calculate_sharpness(candidate_for_metrics)
+    contrast_after = calculate_contrast(candidate_for_metrics)
+    brightness_after = calculate_brightness(candidate_for_metrics)
     quality_after = quality_score(
-
-        sharp_after,
-
-        contrast_after,
-
-        brightness_after
-
+        sharp_after, contrast_after, brightness_after
     )
-
-
-
-    noise_after = calculate_noise_estimate(
-
-        candidate
-
-    )
-
-
-
-    # --------------------------------------------------
+    noise_after = calculate_noise_estimate(candidate_for_metrics)
 
     # IMPROVEMENTS
 
     # --------------------------------------------------
 
-
-
     if quality_before > 0:
-
-
 
         quality_improvement = (
 
@@ -709,15 +539,9 @@ def evaluate_candidate(
 
         ) / quality_before
 
-
-
     else:
 
-
-
         quality_improvement = 0.0
-
-
 
     exposure_improvement = brightness_improvement(
 
@@ -727,19 +551,13 @@ def evaluate_candidate(
 
     )
 
-
-
     # --------------------------------------------------
 
     # SHARPNESS MULTIPLIER
 
     # --------------------------------------------------
 
-
-
     if sharp_before > 0:
-
-
 
         sharpness_multiplier = (
 
@@ -749,15 +567,9 @@ def evaluate_candidate(
 
         )
 
-
-
     else:
 
-
-
         sharpness_multiplier = 1.0
-
-
 
     # --------------------------------------------------
 
@@ -765,11 +577,7 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     if noise_before > 0:
-
-
 
         noise_change = (
 
@@ -779,15 +587,9 @@ def evaluate_candidate(
 
         ) / noise_before
 
-
-
     else:
 
-
-
         noise_change = 0.0
-
-
 
     # --------------------------------------------------
 
@@ -795,21 +597,14 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     structure_similarity = (
 
         calculate_structure_similarity(
-
             original,
-
-            candidate
-
+            candidate_for_metrics
         )
 
     )
-
-
 
     # --------------------------------------------------
 
@@ -817,17 +612,10 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     color_shift = calculate_color_shift(
-
         original,
-
-        candidate
-
+        candidate_for_metrics
     )
-
-
 
     # --------------------------------------------------
 
@@ -835,15 +623,11 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     is_low_light = (
 
         brightness_before < 90
 
     )
-
-
 
     is_severely_dark = (
 
@@ -851,23 +635,17 @@ def evaluate_candidate(
 
     )
 
-
-
     is_blurry = (
 
         sharp_before < 80
 
     )
 
-
-
     # --------------------------------------------------
 
     # SAFETY CONDITIONS
 
     # --------------------------------------------------
-
-
 
     brightness_safe = (
 
@@ -877,8 +655,6 @@ def evaluate_candidate(
 
     )
 
-
-
     sharpness_safe = (
 
         sharpness_multiplier
@@ -886,8 +662,6 @@ def evaluate_candidate(
         <= MAX_SHARPNESS_MULTIPLIER
 
     )
-
-
 
     structure_safe = (
 
@@ -897,8 +671,6 @@ def evaluate_candidate(
 
     )
 
-
-
     color_safe = (
 
         color_shift
@@ -907,21 +679,15 @@ def evaluate_candidate(
 
     )
 
-
-
     # --------------------------------------------------
 
     # NOISE SAFETY
 
     # --------------------------------------------------
 
-
-
     # Allow some increase because super-resolution
 
     # can legitimately reveal high-frequency detail.
-
-
 
     noise_safe = (
 
@@ -931,23 +697,15 @@ def evaluate_candidate(
 
     )
 
-
-
     # --------------------------------------------------
 
     # DETERMINE WHETHER CANDIDATE IS USEFUL
 
     # --------------------------------------------------
 
-
-
     accepted = False
 
-
-
     reason = ""
-
-
 
     # --------------------------------------------------
 
@@ -955,15 +713,9 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     if is_low_light:
 
-
-
         # Brightness correction is the PRIMARY objective.
-
-
 
         if (
 
@@ -995,11 +747,7 @@ def evaluate_candidate(
 
         ):
 
-
-
             accepted = True
-
-
 
             reason = (
 
@@ -1009,132 +757,97 @@ def evaluate_candidate(
 
             )
 
-
-
-
-
     # --------------------------------------------------
 
     # BLUR IMAGE
 
     # --------------------------------------------------
 
-
-
     elif is_blurry:
 
+        # 1. Contrast-enhancement candidates
 
-
-        # Blur restoration has a different objective from
-
-        # brightness/contrast enhancement.
-
-        #
-
-        # We primarily require:
-
-        #   1. measurable sharpness improvement
-
-        #   2. preserved original structure
-
-        #   3. controlled noise
-
-        #   4. no excessive artificial sharpening
-
-        #
-
-        # We deliberately do NOT require the generic
-
-        # quality-improvement threshold here because a
-
-        # small sharpness recovery can be useful even when
-
-        # the composite quality score changes very little.
-
-
-
-        # Require a meaningful relative sharpness improvement.
-        # Tiny changes should not replace an otherwise good
-        # dermatology image.
-        MIN_RELATIVE_SHARPNESS_IMPROVEMENT = 0.10
-
-        if sharp_before > 0:
-
+        if "Contrast Enhanced" in candidate_mode:
             relative_sharpness_improvement = (
-                (sharp_after - sharp_before)
-                / sharp_before
+                (sharp_after - sharp_before) / sharp_before
+                if sharp_before > 0 else 0.0
             )
+
+            if (
+                quality_improvement >= 0
+                and relative_sharpness_improvement >= 0.01
+                and structure_safe
+                and color_safe
+                and noise_safe
+                and brightness_safe
+                and sharpness_safe
+            ):
+                accepted = True
+                reason = (
+                    "Contrast candidate accepted: quality score and "
+                    "sharpness improved while safety checks passed"
+                )
+            else:
+                accepted = False
+                reason = "Contrast candidate failed acceptance checks"
+
+        # 2. Super-resolution / blur-restoration candidates
+
+        elif ("Super Resolution" in candidate_mode or "Full-Resolution Enhancement" in candidate_mode):
+            is_upscaled_output = (
+                candidate.shape[0] > original.shape[0]
+                or candidate.shape[1] > original.shape[1]
+            )
+
+            # Do not claim that detail was recovered based on upscaling alone.
+            # Accept an SR candidate only when the output is genuinely larger
+            # and all conservative preservation checks pass.
+            if (
+                is_upscaled_output
+                and structure_safe
+                and color_safe
+                and noise_safe
+                and brightness_safe
+                and sharpness_safe
+            ):
+                accepted = True
+                reason = (
+                    "Super-resolution output retained at higher resolution; "
+                    "preservation checks passed (detail recovery not guaranteed)"
+                )
+            else:
+                accepted = False
+                reason = "Super-resolution candidate failed preservation checks"
+
+        # 3. Other candidates must meet the generic quality threshold
 
         else:
 
-            relative_sharpness_improvement = 0.0
+            if (
 
-        blur_improved = (
+                quality_improvement >= MIN_QUALITY_IMPROVEMENT
 
-            relative_sharpness_improvement
-            >= MIN_RELATIVE_SHARPNESS_IMPROVEMENT
+                and structure_safe
 
-        )
+                and color_safe
 
+                and noise_safe
 
+                and brightness_safe
 
-        blur_structure_safe = (
+                and sharpness_safe
 
-            structure_similarity >= 0.90
+            ):
 
-        )
+                accepted = True
 
+                reason = "Quality improved while safety checks passed"
 
+            else:
 
-        blur_noise_safe = (
+                accepted = False
 
-            noise_change <= 1.50
-
-        )
-
-
-
-        blur_sharpness_safe = (
-
-            sharpness_multiplier <= MAX_SHARPNESS_MULTIPLIER
-
-        )
-
-
-
-        if (
-
-            blur_improved
-
-            and blur_structure_safe
-
-            and blur_noise_safe
-
-            and blur_sharpness_safe
-
-            and brightness_safe
-
-            and color_safe
-
-        ):
-
-
-
-            accepted = True
-
-
-
-            reason = (
-
-                "Blur restoration improved "
-
-                "recoverable detail while preserving "
-
-                "original structure"
-
-            )
-
-
+                reason = "Candidate failed generic quality checks"
 
     # --------------------------------------------------
 
@@ -1142,11 +855,7 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     else:
-
-
 
         if (
 
@@ -1176,11 +885,7 @@ def evaluate_candidate(
 
         ):
 
-
-
             accepted = True
-
-
 
             reason = (
 
@@ -1198,11 +903,7 @@ def evaluate_candidate(
 
     # --------------------------------------------------
 
-
-
     if is_severely_dark:
-
-
 
         if (
 
@@ -1222,11 +923,7 @@ def evaluate_candidate(
 
         ):
 
-
-
             accepted = True
-
-
 
             reason = (
 
@@ -1236,23 +933,15 @@ def evaluate_candidate(
 
             )
 
-
-
     # --------------------------------------------------
 
     # ORIGINAL CANDIDATE
 
     # --------------------------------------------------
 
-
-
     if candidate_mode == "Original":
 
-
-
         accepted = False
-
-
 
         reason = (
 
@@ -1260,23 +949,17 @@ def evaluate_candidate(
 
         )
 
-
-
     # --------------------------------------------------
 
     # DEBUG
 
     # --------------------------------------------------
 
-
-
     print(
 
         "----------------------------------------"
 
     )
-
-
 
     print(
 
@@ -1285,8 +968,6 @@ def evaluate_candidate(
         candidate_mode
 
     )
-
-
 
     print(
 
@@ -1300,8 +981,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "SHARPNESS:",
@@ -1313,8 +992,6 @@ def evaluate_candidate(
         sharp_after
 
     )
-
-
 
     print(
 
@@ -1328,8 +1005,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "QUALITY:",
@@ -1342,8 +1017,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "QUALITY IMPROVEMENT:",
@@ -1351,8 +1024,6 @@ def evaluate_candidate(
         quality_improvement
 
     )
-
-
 
     print(
 
@@ -1362,8 +1033,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "SHARPNESS MULTIPLIER:",
@@ -1371,8 +1040,6 @@ def evaluate_candidate(
         sharpness_multiplier
 
     )
-
-
 
     print(
 
@@ -1386,8 +1053,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "NOISE CHANGE:",
@@ -1395,8 +1060,6 @@ def evaluate_candidate(
         noise_change
 
     )
-
-
 
     print(
 
@@ -1406,8 +1069,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "COLOR SHIFT:",
@@ -1415,8 +1076,6 @@ def evaluate_candidate(
         color_shift
 
     )
-
-
 
     print(
 
@@ -1426,8 +1085,6 @@ def evaluate_candidate(
 
     )
 
-
-
     print(
 
         "REASON:",
@@ -1435,8 +1092,6 @@ def evaluate_candidate(
         reason
 
     )
-
-
 
     return {
 
@@ -1478,49 +1133,27 @@ def evaluate_candidate(
 
     }
 
-
-
-
-
 # --------------------------------------------------
 
 # SELECT BEST CANDIDATE
 
 # --------------------------------------------------
 
-
-
-def select_best_candidate(
-
-    original,
-
-    candidates
-
-):
+def select_best_candidate(original,candidates):
 
     """
 
    Select the best valid enhancement candidate.
 
-
-
    IMPORTANT:
-
-
 
    We do NOT simply choose the candidate with the
 
    highest sharpness.
 
-
-
    That would reward artificial texture.
 
-
-
    Instead we prioritize:
-
-
 
        1. meaningful quality improvement
 
@@ -1534,15 +1167,11 @@ def select_best_candidate(
 
    """
 
-
-
     original_brightness = calculate_brightness(
 
         original
 
     )
-
-
 
     is_low_light = (
 
@@ -1550,23 +1179,13 @@ def select_best_candidate(
 
     )
 
-
-
     evaluated = []
-
-
 
     for candidate in candidates:
 
-
-
         candidate_image = candidate["image"]
 
-
-
         candidate_mode = candidate["mode"]
-
-
 
         result = evaluate_candidate(
 
@@ -1577,8 +1196,6 @@ def select_best_candidate(
             candidate_mode
 
         )
-
-
 
         evaluated.append(
 
@@ -1592,8 +1209,6 @@ def select_best_candidate(
 
         )
 
-
-
     valid_candidates = [
 
         item
@@ -1604,39 +1219,51 @@ def select_best_candidate(
 
     ]
 
-
-
     # --------------------------------------------------
 
     # NO VALID ENHANCEMENT
 
     # --------------------------------------------------
 
+    # if len(valid_candidates) == 0:
 
+    #     print(
+
+    #         "SELECTION → no valid enhancement "
+
+    #         "candidate found"
+
+    #     )
+
+    #     return (
+
+    #         original,
+
+    #         "No Enhancement"
+
+    #     )
 
     if len(valid_candidates) == 0:
+        print("SELECTION: no valid enhancement candidate found")
+        print("\n--- CANDIDATE REJECTION REPORT ---")
 
+        for item in evaluated:
+            result = item["evaluation"]
+            print(
+                item["candidate"]["mode"],
+                "| accepted:", result["accepted"],
+                "| reason:", result["reason"],
+                "| sharpness:", result["sharpness_before"],
+                "->", result["sharpness_after"],
+                "| contrast:", result["contrast_before"],
+                "->", result["contrast_after"],
+                "| quality improvement:", result["quality_improvement"],
+                "| structure:", result["structure_similarity"],
+                "| noise change:", result["noise_change"],
+            )
 
-
-        print(
-
-            "SELECTION → no valid enhancement "
-
-            "candidate found"
-
-        )
-
-
-
-        return (
-
-            original,
-
-            "No Enhancement"
-
-        )
-
-
+        print("--- END REPORT ---")
+        return original, "No Enhancement"
 
     # --------------------------------------------------
 
@@ -1644,15 +1271,9 @@ def select_best_candidate(
 
     # --------------------------------------------------
 
-
-
     def candidate_score(item):
 
-
-
         metrics = item["evaluation"]
-
-
 
         quality_gain = (
 
@@ -1660,15 +1281,11 @@ def select_best_candidate(
 
         )
 
-
-
         exposure_gain = (
 
             metrics["exposure_improvement"]
 
         )
-
-
 
         structure = (
 
@@ -1676,23 +1293,17 @@ def select_best_candidate(
 
         )
 
-
-
         sharpness_multiplier = (
 
             metrics["sharpness_multiplier"]
 
         )
 
-
-
         noise_change = (
 
             metrics["noise_change"]
 
         )
-
-
 
         # Base score from actual quality improvement.
 
@@ -1702,15 +1313,11 @@ def select_best_candidate(
 
         )
 
-
-
         # For low-light images, brightness correction
 
         # gets additional importance.
 
         if is_low_light:
-
-
 
             score += (
 
@@ -1726,8 +1333,6 @@ def select_best_candidate(
 
             )
 
-
-
         # Reward structure preservation.
 
         score += (
@@ -1736,13 +1341,9 @@ def select_best_candidate(
 
         )
 
-
-
         # Penalize aggressive sharpness.
 
         if sharpness_multiplier > 2.0:
-
-
 
             score -= (
 
@@ -1752,13 +1353,9 @@ def select_best_candidate(
 
             ) * 3.0
 
-
-
         # Penalize noise growth.
 
         if noise_change > 0:
-
-
 
             score -= (
 
@@ -1766,11 +1363,7 @@ def select_best_candidate(
 
             )
 
-
-
         return score
-
-
 
     best = max(
 
@@ -1780,23 +1373,15 @@ def select_best_candidate(
 
     )
 
-
-
     best_candidate = best["candidate"]
 
-
-
     best_evaluation = best["evaluation"]
-
-
 
     print(
 
         "========================================"
 
     )
-
-
 
     print(
 
@@ -1806,8 +1391,6 @@ def select_best_candidate(
 
     )
 
-
-
     print(
 
         "BEST SCORE:",
@@ -1815,8 +1398,6 @@ def select_best_candidate(
         candidate_score(best)
 
     )
-
-
 
     print(
 
@@ -1830,8 +1411,6 @@ def select_best_candidate(
 
     )
 
-
-
     print(
 
         "BRIGHTNESS IMPROVEMENT:",
@@ -1843,8 +1422,6 @@ def select_best_candidate(
         ]
 
     )
-
-
 
     print(
 
@@ -1858,15 +1435,11 @@ def select_best_candidate(
 
     )
 
-
-
     print(
 
         "========================================"
 
     )
-
-
 
     return (
 
@@ -1876,17 +1449,11 @@ def select_best_candidate(
 
     )
 
-
-
-
-
 # --------------------------------------------------
 
 # INTERPRETATION
 
 # --------------------------------------------------
-
-
 
 def generate_interpretation(
 
@@ -1910,19 +1477,13 @@ def generate_interpretation(
 
     insights = []
 
-
-
     # --------------------------------------------------
 
     # LIGHTING
 
     # --------------------------------------------------
 
-
-
     if brightness_before < 40:
-
-
 
         insights.append(
 
@@ -1930,11 +1491,7 @@ def generate_interpretation(
 
         )
 
-
-
     elif brightness_before < 70:
-
-
 
         insights.append(
 
@@ -1942,11 +1499,7 @@ def generate_interpretation(
 
         )
 
-
-
     elif brightness_before < 90:
-
-
 
         insights.append(
 
@@ -1954,11 +1507,7 @@ def generate_interpretation(
 
         )
 
-
-
     else:
-
-
 
         insights.append(
 
@@ -1966,19 +1515,13 @@ def generate_interpretation(
 
         )
 
-
-
     # --------------------------------------------------
 
     # BLUR
 
     # --------------------------------------------------
 
-
-
     if sharpness_before < 10:
-
-
 
         insights.append(
 
@@ -1986,11 +1529,7 @@ def generate_interpretation(
 
         )
 
-
-
     elif sharpness_before < 40:
-
-
 
         insights.append(
 
@@ -1998,11 +1537,7 @@ def generate_interpretation(
 
         )
 
-
-
     elif sharpness_before < 80:
-
-
 
         insights.append(
 
@@ -2010,11 +1545,7 @@ def generate_interpretation(
 
         )
 
-
-
     else:
-
-
 
         insights.append(
 
@@ -2022,31 +1553,21 @@ def generate_interpretation(
 
         )
 
-
-
     # --------------------------------------------------
 
     # ENHANCEMENT
 
     # --------------------------------------------------
 
-
-
     if enhancement_accepted:
 
-
-
         if brightness_after > brightness_before + 1.0:
-
-
 
             insights.append(
 
                 "Image brightness was adaptively improved"
 
             )
-
-
 
         insights.append(
 
@@ -2056,19 +1577,13 @@ def generate_interpretation(
 
         )
 
-
-
         insights.append(
 
             "Original image structure was preserved"
 
         )
 
-
-
     else:
-
-
 
         insights.append(
 
@@ -2078,15 +1593,11 @@ def generate_interpretation(
 
         )
 
-
-
         insights.append(
 
             "Original image preserved as final fallback"
 
         )
-
-
 
     # --------------------------------------------------
 
@@ -2100,11 +1611,7 @@ def generate_interpretation(
 
     #
 
-
-
     if confidence_delta > 0:
-
-
 
         insights.append(
 
@@ -2116,11 +1623,7 @@ def generate_interpretation(
 
         )
 
-
-
     elif confidence_delta < 0:
-
-
 
         insights.append(
 
@@ -2132,11 +1635,7 @@ def generate_interpretation(
 
         )
 
-
-
     else:
-
-
 
         insights.append(
 
@@ -2144,13 +1643,7 @@ def generate_interpretation(
 
         )
 
-
-
     return insights
-
-
-
-
 
 # --------------------------------------------------
 
@@ -2158,15 +1651,28 @@ def generate_interpretation(
 
 # --------------------------------------------------
 
-
-
 @router.post("/upload")
-
 async def upload_image(
-
     file: UploadFile = File(...)
-
 ):
+    image_bytes = await file.read()
+
+    # --------------------------------------------------
+    # DECODE ORIGINAL IMAGE
+    # --------------------------------------------------
+
+    np_arr = np.frombuffer(image_bytes, dtype=np.uint8)
+
+    original = cv2.imdecode(
+        np_arr,
+        cv2.IMREAD_COLOR
+    )
+
+    if original is None:
+        raise ValueError("Unable to decode uploaded image.")
+
+    save_debug_image("original", original)
+
 
 
 
@@ -2176,11 +1682,7 @@ async def upload_image(
 
     # --------------------------------------------------
 
-
-
     # image_bytes = await file.read()
-
-
 
     # original, candidates, _ = enhance_image(
 
@@ -2190,124 +1692,190 @@ async def upload_image(
 
 
 
-    image_bytes = await file.read()
+
 
     # --------------------------------------------------
-    # DECODE ORIGINAL IMAGE
-    # --------------------------------------------------
 
-    np_arr = np.frombuffer(
-        image_bytes,
-        np.uint8
-    )
-
-    original = cv2.imdecode(
-        np_arr,
-        cv2.IMREAD_COLOR
-    )
-
-    if original is None:
-        raise ValueError(
-            "Unable to decode uploaded image."
-        )
-
-    # --------------------------------------------------
     # LESION SEGMENTATION
+
     # --------------------------------------------------
 
     segmentation_result = segment_lesion(
+
         original
+
     )
 
     lesion_mask = segmentation_result["mask"]
+
     lesion_info = segmentation_result["lesion_info"]
 
     # --------------------------------------------------
+
     # LESION MASK RELIABILITY
+
     # --------------------------------------------------
 
     mask_validation = validate_lesion_mask(
+
         lesion_mask
+
     )
 
     lesion_aware_enabled = mask_validation["reliable"]
 
     print(
+
         "LESION SEGMENTATION:",
+
         lesion_info
+
     )
 
     print(
+
         "LESION MASK VALIDATION:",
+
         mask_validation
+
     )
 
     print(
+
         "LESION-AWARE ENHANCEMENT:",
+
         lesion_aware_enabled
+
     )
 
     # --------------------------------------------------
+
     # GENERATE EXISTING ENHANCEMENT CANDIDATES
+
     # --------------------------------------------------
 
     _, candidates, _ = enhance_image(
+
         image_bytes
+
     )
 
     # --------------------------------------------------
+
     # APPLY LESION-AWARE BLENDING
+
     # --------------------------------------------------
 
     # If the segmentation mask passes the runtime reliability
+
     # check, enhancement candidates are applied primarily to
+
     # the predicted lesion region. If the mask is unreliable,
+
     # the existing whole-image candidates are preserved.
 
     if lesion_aware_enabled:
 
         lesion_aware_candidates = []
 
+        # ADDED DIAGNOSTICS: compare raw SR with lesion-aware output.
+        # This only logs metrics and saves debug copies; selection is unchanged.
+        debug_dir = os.path.join(_APP_DIR, "debug_outputs")
+
         for candidate in candidates:
 
             candidate_mode = candidate["mode"]
+
             candidate_image = candidate["image"]
 
             # Never modify the original image.
+
             if candidate_mode == "Original":
 
                 lesion_aware_candidates.append(
+
                     candidate
+
                 )
 
                 continue
 
             lesion_aware_image = (
+
                 apply_lesion_aware_enhancement(
+
                     original,
+
                     candidate_image,
+
                     lesion_mask
+
                 )
+
             )
 
+            # ADDED DIAGNOSTICS: inspect super-resolution before/after blending.
+            if "Super Resolution" in candidate_mode or "Full-Resolution Enhancement" in candidate_mode:
+                os.makedirs(debug_dir, exist_ok=True)
+                raw_path = os.path.join(debug_dir, "raw_super_resolution.png")
+                blended_path = os.path.join(debug_dir, "lesion_aware_super_resolution.png")
+                cv2.imwrite(raw_path, candidate_image)
+                cv2.imwrite(blended_path, lesion_aware_image)
+
+                original_h, original_w = original.shape[:2]
+                raw_normalized = (
+                    cv2.resize(candidate_image, (original_w, original_h), interpolation=cv2.INTER_AREA)
+                    if candidate_image.shape[:2] != original.shape[:2]
+                    else candidate_image
+                )
+                blended_normalized = (
+                    cv2.resize(lesion_aware_image, (original_w, original_h), interpolation=cv2.INTER_AREA)
+                    if lesion_aware_image.shape[:2] != original.shape[:2]
+                    else lesion_aware_image
+                )
+
+                print("\n--- SUPER-RESOLUTION DIAGNOSTICS ---")
+                print("Original dimensions:", f"{original_w}x{original_h}")
+                print("Raw SR dimensions:", f"{candidate_image.shape[1]}x{candidate_image.shape[0]}")
+                print("Lesion-aware SR dimensions:", f"{lesion_aware_image.shape[1]}x{lesion_aware_image.shape[0]}")
+                print("Original sharpness:", calculate_sharpness(original))
+                print("Raw SR sharpness (native size):", calculate_sharpness(candidate_image))
+                print("Lesion-aware SR sharpness (native size):", calculate_sharpness(lesion_aware_image))
+                print("Raw SR sharpness (normalized):", calculate_sharpness(raw_normalized))
+                print("Lesion-aware SR sharpness (normalized):", calculate_sharpness(blended_normalized))
+                print("Raw SR color shift:", calculate_color_shift(original, raw_normalized))
+                print("Lesion-aware SR color shift:", calculate_color_shift(original, blended_normalized))
+                print("Raw SR debug image:", raw_path)
+                print("Lesion-aware SR debug image:", blended_path)
+                print("--- END SUPER-RESOLUTION DIAGNOSTICS ---\n")
+
             lesion_aware_candidates.append(
+
                 {
+
                     **candidate,
+
                     "image": lesion_aware_image,
+
                     "mode": (
+
                         candidate_mode
+
                         + " + Lesion-Aware"
+
                     ),
+
                 }
+
             )
 
         candidates = lesion_aware_candidates
 
     # --------------------------------------------------
+
     # SELECT BEST ENHANCEMENT
+
     # --------------------------------------------------
-
-
 
     final_image, final_mode = (
 
@@ -2321,7 +1889,9 @@ async def upload_image(
 
     )
 
-
+    print("SELECTED MODE:", final_mode)
+    print("FINAL IMAGE IS ORIGINAL:", final_image is original)
+    print("FINAL IMAGE SHAPE:", final_image.shape)
 
     enhancement_accepted = (
 
@@ -2329,15 +1899,11 @@ async def upload_image(
 
     )
 
-
-
     # --------------------------------------------------
 
     # FINAL IMAGE METRICS
 
     # --------------------------------------------------
-
-
 
     sharp_before = calculate_sharpness(
 
@@ -2345,15 +1911,11 @@ async def upload_image(
 
     )
 
-
-
     sharp_after = calculate_sharpness(
 
         final_image
 
     )
-
-
 
     contrast_before = calculate_contrast(
 
@@ -2361,15 +1923,11 @@ async def upload_image(
 
     )
 
-
-
     contrast_after = calculate_contrast(
 
         final_image
 
     )
-
-
 
     brightness_before = calculate_brightness(
 
@@ -2377,15 +1935,11 @@ async def upload_image(
 
     )
 
-
-
     brightness_after = calculate_brightness(
 
         final_image
 
     )
-
-
 
     quality_before = quality_score(
 
@@ -2397,8 +1951,6 @@ async def upload_image(
 
     )
 
-
-
     quality_after = quality_score(
 
         sharp_after,
@@ -2409,11 +1961,7 @@ async def upload_image(
 
     )
 
-
-
     if quality_before > 0:
-
-
 
         quality_improvement = (
 
@@ -2423,15 +1971,9 @@ async def upload_image(
 
         ) / quality_before
 
-
-
     else:
 
-
-
         quality_improvement = 0.0
-
-
 
     exposure_improvement = brightness_improvement(
 
@@ -2441,11 +1983,7 @@ async def upload_image(
 
     )
 
-
-
     if sharp_before > 0:
-
-
 
         sharpness_multiplier = (
 
@@ -2455,15 +1993,9 @@ async def upload_image(
 
         )
 
-
-
     else:
 
-
-
         sharpness_multiplier = 1.0
-
-
 
     # --------------------------------------------------
 
@@ -2471,23 +2003,17 @@ async def upload_image(
 
     # --------------------------------------------------
 
-
-
     print(
 
         "========================================"
 
     )
 
-
-
     print(
 
         "FINAL PIPELINE RESULT"
 
     )
-
-
 
     print(
 
@@ -2497,8 +2023,6 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "ENHANCEMENT ACCEPTED:",
@@ -2506,8 +2030,6 @@ async def upload_image(
         enhancement_accepted
 
     )
-
-
 
     print(
 
@@ -2521,8 +2043,6 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "SHARPNESS:",
@@ -2534,8 +2054,6 @@ async def upload_image(
         sharp_after
 
     )
-
-
 
     print(
 
@@ -2549,8 +2067,6 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "QUALITY:",
@@ -2563,8 +2079,6 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "QUALITY IMPROVEMENT:",
@@ -2573,15 +2087,11 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "========================================"
 
     )
-
-
 
     # --------------------------------------------------
 
@@ -2599,23 +2109,17 @@ async def upload_image(
 
     #
 
-
-
     confidence_before = predict_confidence(
 
         original
 
     )
 
-
-
     confidence_after = predict_confidence(
 
         final_image
 
     )
-
-
 
     confidence_delta = (
 
@@ -2625,8 +2129,6 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "CONF BEFORE:",
@@ -2634,8 +2136,6 @@ async def upload_image(
         confidence_before
 
     )
-
-
 
     print(
 
@@ -2645,8 +2145,6 @@ async def upload_image(
 
     )
 
-
-
     print(
 
         "CONF DELTA:",
@@ -2655,15 +2153,11 @@ async def upload_image(
 
     )
 
-
-
     # --------------------------------------------------
 
     # INTERPRETATION
 
     # --------------------------------------------------
-
-
 
     interpretation = generate_interpretation(
 
@@ -2685,15 +2179,11 @@ async def upload_image(
 
     )
 
-
-
     # --------------------------------------------------
 
     # ENCODE FINAL IMAGE
 
     # --------------------------------------------------
-
-
 
     success, buffer = cv2.imencode(
 
@@ -2703,11 +2193,7 @@ async def upload_image(
 
     )
 
-
-
     if not success:
-
-
 
         raise RuntimeError(
 
@@ -2715,15 +2201,11 @@ async def upload_image(
 
         )
 
-
-
     image_base64 = base64.b64encode(
 
         buffer
 
     ).decode("utf-8")
-
-
 
     # --------------------------------------------------
 
@@ -2731,118 +2213,115 @@ async def upload_image(
 
     # --------------------------------------------------
 
-
-
     return {
-
-
 
         "image":
 
             image_base64,
 
-
-
         "mode":
 
             final_mode,
 
-
-
         "enhancement_accepted":
+
             enhancement_accepted,
 
         "segmentation": {
+
             "lesion_detected": bool(
+
                 lesion_info.get(
+
                     "lesion_detected",
+
                     False
+
                 )
+
             ),
+
             "mask_reliable": bool(
+
                 lesion_aware_enabled
+
             ),
+
             "area_ratio": float(
+
                 mask_validation.get(
+
                     "area_ratio",
+
                     0.0
+
                 )
+
             ),
+
             "largest_component_ratio": float(
+
                 mask_validation.get(
+
                     "largest_component_ratio",
+
                     0.0
+
                 )
+
             ),
+
             "reason": mask_validation.get(
+
                 "reason",
+
                 ""
+
             ),
+
         },
 
         "metrics": {
-
-
 
             "brightness_before":
 
                 brightness_before,
 
-
-
             "brightness_after":
 
                 brightness_after,
-
-
 
             "brightness_improvement":
 
                 exposure_improvement,
 
-
-
             "sharpness_before":
 
                 sharp_before,
-
-
 
             "sharpness_after":
 
                 sharp_after,
 
-
-
             "sharpness_multiplier":
 
                 sharpness_multiplier,
-
-
 
             "contrast_before":
 
                 contrast_before,
 
-
-
             "contrast_after":
 
                 contrast_after,
-
-
 
             "quality_before":
 
                 quality_before,
 
-
-
             "quality_after":
 
                 quality_after,
-
-
 
             "quality_improvement":
 
@@ -2850,37 +2329,25 @@ async def upload_image(
 
         },
 
-
-
         "confidence": {
-
-
 
             "before":
 
                 confidence_before,
 
-
-
             "after":
 
                 confidence_after,
 
-
-
             "delta":
 
                 confidence_delta,
-
-
 
             "final":
 
                 confidence_after,
 
         },
-
-
 
         "interpretation":
 
