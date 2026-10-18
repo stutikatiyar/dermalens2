@@ -1,12 +1,17 @@
-# DermaLens 🧠🩺
+<div align="center">
 
-<p align="center">
-  <b>Domain-Aware Dermatology Image Enhancement & Validation Framework</b>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:ec4899,45:f97316,100:8b5cf6" width="100%" alt="DermaLens — Dermatology Image Enhancement and Validation" />
+
+<p>
+  <img src="https://img.shields.io/badge/Computer%20Vision-C2185B?style=flat-square" alt="Computer Vision" />
+  <img src="https://img.shields.io/badge/Medical%20Imaging-6A1B9A?style=flat-square" alt="Medical Imaging" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React" />
 </p>
 
-<p align="center">
-  Adaptive image restoration • Quality-aware validation • Downstream AI analysis
-</p>
+**Adaptive image restoration · Quality-aware validation · Downstream AI analysis**
+
+</div>
 
 ---
 
@@ -86,59 +91,113 @@ Instead of immediately modifying the uploaded image, the system:
 ## ⚙️ System Architecture
 
 ```text
+
                          USER IMAGE
+
                              │
+
                              ▼
+
                   ┌─────────────────────┐
+
                   │   QUALITY ANALYSIS  │
+
                   │                     │
+
                   │ • Brightness        │
+
                   │ • Sharpness / Blur  │
+
                   │ • Contrast          │
+
                   │ • Noise             │
+
                   └──────────┬──────────┘
+
                              │
+
                              ▼
+
                  ┌────────────────────────┐
+
                  │  CANDIDATE GENERATION  │
+
                  │                        │
+
                  │ • Brightness correction│
+
                  │ • Contrast enhancement │
+
                  │ • Noise reduction      │
+
                  │ • Super-resolution     │
+
                  │ • Real-ESRGAN          │
+
                  │ • EDSR                 │
+
                  └───────────┬────────────┘
+
                              │
+
                              ▼
+
                   ┌──────────────────────┐
+
                   │   VALIDATION LAYER   │
+
                   │                      │
+
                   │ • Quality improvement│
+
                   │ • Exposure change    │
+
                   │ • Noise change       │
+
                   │ • Structural similarity
+
                   │ • Color shift        │
+
                   │ • Sharpness change   │
+
                   └──────────┬───────────┘
+
                              │
+
                              ▼
+
                   ┌──────────────────────┐
+
                   │ BEST VALID CANDIDATE │
+
                   │                      │
+
                   │ Enhanced image       │
+
                   │ OR                   │
+
                   │ Original image       │
+
                   └──────────┬───────────┘
+
                              │
+
                              ▼
+
                   ┌──────────────────────┐
+
                   │ DOWNSTREAM ANALYSIS  │
+
                   │                      │
+
                   │ Lesion → ISIC model │
+
                   │ Wound  → future     │
+
                   │ Other  → future     │
+
                   └──────────────────────┘
+
 ```
 
 ---
@@ -234,12 +293,19 @@ Every candidate must be evaluated against the original image.
 The validation layer currently considers factors such as:
 
 ```text
+
 Quality improvement
+
 Exposure improvement
+
 Sharpness change
+
 Noise change
+
 Structural similarity
+
 Color shift
+
 ```
 
 This prevents the system from automatically selecting an image simply because it has a higher numerical sharpness score.
@@ -247,28 +313,43 @@ This prevents the system from automatically selecting an image simply because it
 For example:
 
 ```text
+
 Candidate A
 
+
 Sharpness       ↑
+
 Contrast        ↑
+
 Noise           ↑↑
+
 Structure       ↓
 
+
 → Rejected
+
 ```
 
 while:
 
 ```text
+
 Candidate B
 
+
 Brightness      ↑
+
 Sharpness       ↑
+
 Noise           ≈
+
 Structure       ≈
+
 Color shift     Low
 
+
 → Potentially accepted
+
 ```
 
 The objective is **controlled improvement**, not maximum enhancement.
@@ -282,17 +363,29 @@ After candidate validation, DermaLens selects the highest-scoring valid candidat
 If none of the generated candidates satisfies the validation criteria, the original image is preserved.
 
 ```text
+
 Enhanced candidates
+
         │
+
         ▼
+
 Validation checks
+
         │
+
         ├── Valid candidate → Select best candidate
+
         │
+
         └── No valid candidate
+
                     │
+
                     ▼
+
              Preserve original
+
 ```
 
 This creates a safety-oriented fallback mechanism.
@@ -310,22 +403,36 @@ The current implementation uses a **ResNet18-based dermatology model**.
 The model can be evaluated on both the original and enhanced images.
 
 ```text
+
 Original Image
+
       │
+
       ▼
+
 ResNet18
+
       │
+
       ▼
+
 Prediction + Confidence
 
 
 Enhanced Image
+
       │
+
       ▼
+
 ResNet18
+
       │
+
       ▼
+
 Prediction + Confidence
+
 ```
 
 The system can then compare the resulting confidence values.
@@ -333,10 +440,14 @@ The system can then compare the resulting confidence values.
 Example:
 
 ```text
+
 Original Confidence  → 0.80
+
 Enhanced Confidence  → 0.83
 
+
 Confidence Delta      → +0.03
+
 ```
 
 Model confidence is treated as a **downstream validation signal**, not as the sole definition of image quality.
@@ -363,17 +474,25 @@ A visually sharper image can still be worse if it introduces:
 Therefore:
 
 ```text
+
 Higher Sharpness
+
         ≠
+
 Better Dermatology Image
+
 ```
 
 Similarly:
 
 ```text
+
 Higher Model Confidence
+
         ≠
+
 Clinical Correctness
+
 ```
 
 DermaLens therefore evaluates enhancement using multiple signals rather than relying on a single metric.
@@ -407,13 +526,21 @@ DermaLens therefore evaluates enhancement using multiple signals rather than rel
 ## 🛠️ Tech Stack
 
 | Layer             | Technologies                             |
+
 | ----------------- | ---------------------------------------- |
+
 | Frontend          | React, Vite, Tailwind CSS, Framer Motion |
+
 | Backend           | FastAPI, Python                          |
+
 | Image Processing  | OpenCV, NumPy                            |
+
 | Machine Learning  | PyTorch                                  |
+
 | Dermatology Model | ResNet18                                 |
+
 | Super Resolution  | Real-ESRGAN, EDSR                        |
+
 | API Communication | Fetch / Axios                            |
 
 ---
@@ -421,77 +548,149 @@ DermaLens therefore evaluates enhancement using multiple signals rather than rel
 ## 📂 Project Structure
 
 ```text
+
 dermalens/
+
 │
+
 ├── backend/
+
 │   │
+
 │   ├── app/
+
 │   │   │
+
 │   │   ├── ml/
+
 │   │   │   ├── degrade.py
+
 │   │   │   ├── derm_model.py
+
 │   │   │   ├── enhancement.py
+
 │   │   │   ├── evaluate.py
+
 │   │   │   ├── evaluate_derm.py
+
 │   │   │   ├── generate_comparison_figure.py
+
 │   │   │   ├── inference.py
+
 │   │   │   ├── make_bad_images.py
+
 │   │   │   ├── metrics.py
+
 │   │   │   ├── pipeline.py
+
 │   │   │   ├── prepare_data.py
+
 │   │   │   ├── quality_analyzer.py
+
 │   │   │   ├── superres_enhancer.py
+
 │   │   │   ├── train_derm.py
+
 │   │   │   │
+
 │   │   │   ├── models/
+
 │   │   │   │   └── isic_resnet18.pth
+
 │   │   │   │
+
 │   │   │   ├── realesrgan_weights/
+
 │   │   │   │   └── realesr-general-x4v3.pth
+
 │   │   │   │
+
 │   │   │   └── weights/
+
 │   │   │       └── EDSR_x2.pb
+
 │   │   │
+
 │   │   └── routes/
+
 │   │       └── upload.py
+
 │   │
+
 │   ├── requirements.txt
+
 │   └── test_realesrgan.py
+
 │
+
 └── frontend/
+
     │
+
     └── dermalens/
+
         │
+
         ├── src/
+
         │   ├── api/
+
         │   │   └── api.js
+
         │   │
+
         │   ├── assets/
+
         │   │   ├── hero.png
+
         │   │   ├── react.svg
+
         │   │   └── vite.svg
+
         │   │
+
         │   ├── components/
+
         │   │   ├── AIOrb.jsx
+
         │   │   ├── AIProcessing.jsx
+
         │   │   ├── BackgroundGlow.jsx
+
         │   │   ├── HeroSection.jsx
+
         │   │   ├── MetricsCard.jsx
+
         │   │   ├── Navbar.jsx
+
         │   │   ├── ResultSection.jsx
+
         │   │   ├── UploadBox.jsx
+
         │   │   └── UploadSection.jsx
+
         │   │
+
         │   ├── pages/
+
         │   │   └── Home.jsx
+
         │   │
+
         │   ├── App.css
+
         │   ├── App.jsx
+
         │   ├── index.css
+
         │   └── main.jsx
+
         │
+
         ├── package.json
+
         └── vite.config.js
+
 ```
 
 ---
@@ -503,43 +702,57 @@ dermalens/
 Navigate to the backend directory:
 
 ```bash
+
 cd backend
+
 ```
 
 Create a virtual environment:
 
 ```bash
+
 python -m venv venv
+
 ```
 
 #### Windows
 
 ```bash
+
 venv\Scripts\activate
+
 ```
 
 #### Linux / macOS / GitHub Codespaces
 
 ```bash
+
 source venv/bin/activate
+
 ```
 
 Install dependencies:
 
 ```bash
+
 pip install -r requirements.txt
+
 ```
 
 Start the FastAPI server:
 
 ```bash
+
 python -m uvicorn app.main:app --reload
+
 ```
 
 The backend will be available at:
 
 ```text
-http://127.0.0.1:8000
+
+http\://127.0.0.1:8000
+
 ```
 
 ---
@@ -549,19 +762,25 @@ http://127.0.0.1:8000
 Navigate to the frontend:
 
 ```bash
+
 cd frontend/dermalens
+
 ```
 
 Install dependencies:
 
 ```bash
+
 npm install
+
 ```
 
 Start the development server:
 
 ```bash
+
 npm run dev
+
 ```
 
 The Vite development server will start on the configured development port.
@@ -602,30 +821,45 @@ DermaLens evaluates enhancement using multiple image-level signals.
 An example low-quality input may produce results such as:
 
 ```text
+
 Original
+
 ────────────────────────────
 
+
 Brightness       → 58.32
+
 Sharpness        → 4.74
+
 Contrast         → 6.89
 
 
 Selected Candidate
+
 ────────────────────────────
 
+
 Brightness       → 87.64
+
 Sharpness        → 8.54
+
 Contrast         → 8.28
+
 Structure        → 0.995
+
 ```
 
 The system can then evaluate the downstream model:
 
 ```text
+
 Confidence Before → 0.768
+
 Confidence After  → 0.794
 
+
 Δ Confidence      → +0.026
+
 ```
 
 The exact values depend on the uploaded image.
@@ -639,15 +873,21 @@ DermaLens deliberately avoids treating a single metric as the ground truth.
 For example, a candidate may produce:
 
 ```text
+
 Sharpness ↑↑
+
 ```
 
 but simultaneously:
 
 ```text
+
 Noise ↑↑
+
 Color Shift ↑
+
 Structure Similarity ↓
+
 ```
 
 Such a candidate should not automatically be considered better.
@@ -655,11 +895,17 @@ Such a candidate should not automatically be considered better.
 The framework therefore attempts to balance:
 
 ```text
+
 Image Quality
+
       +
+
 Information Preservation
+
       +
+
 Downstream Model Behavior
+
 ```
 
 rather than optimizing only for visual sharpness.
@@ -675,25 +921,45 @@ The enhancement layer can prepare an image without needing to know which abnorma
 The downstream analysis layer can then route the image to an appropriate specialized model.
 
 ```text
+
                          Skin Image
+
                              │
+
                              ▼
+
                     ┌─────────────────┐
+
                     │    DermaLens    │
+
                     │ Enhancement +   │
+
                     │   Validation    │
+
                     └────────┬────────┘
+
                              │
+
                              ▼
+
                     Abnormality Analysis
+
                              │
+
               ┌──────────────┼──────────────┐
+
               │              │              │
+
               ▼              ▼              ▼
+
            Lesion          Wound          Other
+
               │              │              │
+
               ▼              ▼              ▼
+
          ISIC Model      Future Model    Future Model
+
 ```
 
 This architecture allows the preprocessing framework to remain independent from individual abnormality classifiers.
@@ -784,26 +1050,47 @@ DermaLens investigates a fundamental problem in medical AI:
 Instead of treating preprocessing as a fixed sequence of filters, DermaLens treats it as a **decision-making and validation layer between image acquisition and downstream AI analysis**.
 
 ```text
+
               IMAGE ACQUISITION
+
                      │
+
                      ▼
+
              ┌───────────────┐
+
              │   DermaLens   │
+
              │               │
+
              │ Quality       │
+
              │ Analysis      │
+
              │      ↓        │
+
              │ Enhancement   │
+
              │      ↓        │
+
              │ Validation    │
+
              └───────┬───────┘
+
                      │
+
                      ▼
+
              ABNORMALITY ANALYSIS
+
                      │
+
           ┌──────────┼──────────┐
+
           ▼          ▼          ▼
+
         Lesion      Wound      Other
+
 ```
 
 ---
@@ -865,5 +1152,7 @@ Engineering • AI/ML • Computer Vision
 ---
 
 <p align="center">
+
   <b>DermaLens — Enhance carefully. Validate before trusting.</b>
+
 </p>
