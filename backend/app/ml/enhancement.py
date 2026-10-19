@@ -107,10 +107,13 @@ def enhance_contrast(image, clip_limit=1.05):
         cv2.COLOR_LAB2BGR
     )
 
-    # Retain most of the original image information.
+    # Make the luminance correction more visible while retaining
+    # a substantial contribution from the original image.
+    # This changes luminance contrast only; the LAB color channels
+    # are carried through unchanged by the CLAHE operation.
     result = cv2.addWeighted(
-        image, 0.70,
-        enhanced, 0.30,
+        image, 0.55,
+        enhanced, 0.45,
         0
     )
 
@@ -258,7 +261,7 @@ def generate_enhancement_candidates(image):
 
         contrast_candidate = enhance_contrast(
             original,
-            clip_limit=1.1
+            clip_limit=1.3
         )
 
         candidates.append(
