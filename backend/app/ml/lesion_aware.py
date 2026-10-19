@@ -218,13 +218,12 @@ def apply_lesion_aware_enhancement(original, candidate, lesion_mask):
         original_float = original_resized.astype(np.float32)
         candidate_float = candidate.astype(np.float32)
 
-        # Keep the candidate across the whole image so its 2x resolution
-        # survives. Use the lesion mask only as a gentle local emphasis;
-        # don't replace the rest of the image with an interpolated original.
-        lesion_weight = 0.20 * soft_mask
-        result = candidate_float * (1.0 - lesion_weight) + (
-            candidate_float * soft_mask + original_float * (1.0 - soft_mask)
-        ) * lesion_weight
+        # Preserve the EDSR resolution while limiting enhancement
+        # to the segmented lesion region.
+        result = (
+            candidate_float * soft_mask
+            + original_float * (1.0 - soft_mask)
+        )
 
         print(
             "LESION-AWARE SR:",
