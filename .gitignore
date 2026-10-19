@@ -51,3 +51,6 @@ Add-Content .gitignore "`n# Third-party repository metadata`n/third_party/MPRNet
 /backend/app/ml/third_party/
 __pycache__/
 *.py[cod]
+
+# Local ML experiment outputs
+/backend/debug/
