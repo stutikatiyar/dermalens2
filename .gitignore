@@ -40,3 +40,14 @@ Thumbs.db
 
 venv/
 __pycache__/
+# Duplicate MPRNet source copy
+/backend/app/ml/third_party/
+Add-Content .gitignore "`n# Third-party repository metadata`n/third_party/MPRNet/.git/`n__pycache__/`n*.py[cod]"
+# Duplicate MPRNet source copy
+/backend/app/ml/third_party/
+
+# Third-party repository metadata
+/third_party/MPRNet/.git/
+/backend/app/ml/third_party/
+__pycache__/
+*.py[cod]
