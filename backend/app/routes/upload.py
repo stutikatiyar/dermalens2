@@ -38,17 +38,6 @@ from app.ml.lesion_aware import (
 
 )
 
-from pathlib import Path
-import cv2
-
-DEBUG_DIR = Path("debug_images")
-DEBUG_DIR.mkdir(exist_ok=True)
-
-def save_debug_image(name, image):
-    path = DEBUG_DIR / f"{name}.png"
-    cv2.imwrite(str(path), image)
-    print(f"DEBUG IMAGE SAVED: {path.resolve()}")
-
 router = APIRouter()
 
 # --------------------------------------------------
@@ -600,8 +589,11 @@ def evaluate_candidate(
     structure_similarity = (
 
         calculate_structure_similarity(
+
             original,
-            candidate_for_metrics
+
+            candidate
+
         )
 
     )
@@ -613,8 +605,11 @@ def evaluate_candidate(
     # --------------------------------------------------
 
     color_shift = calculate_color_shift(
+
         original,
-        candidate_for_metrics
+
+        candidate
+
     )
 
     # --------------------------------------------------
@@ -774,7 +769,10 @@ def evaluate_candidate(
             )
 
             if (
-                quality_improvement >= 0
+                # For blurry images, allow a contrast candidate when its
+                # quality score does not regress and sharpness improves
+                # measurably; the remaining safety checks must still pass.
+                quality_improvement >= 0.0
                 and relative_sharpness_improvement >= 0.01
                 and structure_safe
                 and color_safe
@@ -784,40 +782,63 @@ def evaluate_candidate(
             ):
                 accepted = True
                 reason = (
-                    "Contrast candidate accepted: quality score and "
-                    "sharpness improved while safety checks passed"
+                    "Contrast candidate accepted: quality did not decrease, "
+                    "sharpness improved by at least 1%, and safety checks passed"
                 )
             else:
                 accepted = False
-                reason = "Contrast candidate failed acceptance checks"
+                reason = (
+                    "Contrast candidate rejected: sharpness improvement or "
+                    "one or more safety checks did not pass"
+                )
 
         # 2. Super-resolution / blur-restoration candidates
 
         elif ("Super Resolution" in candidate_mode or "Full-Resolution Enhancement" in candidate_mode):
-            is_upscaled_output = (
-                candidate.shape[0] > original.shape[0]
-                or candidate.shape[1] > original.shape[1]
+
+            min_sharpness_improvement = 0.10
+
+            relative_sharpness_improvement = (
+
+                (sharp_after - sharp_before) / sharp_before
+
+                if sharp_before > 0
+
+                else 0.0
+
             )
 
-            # Do not claim that detail was recovered based on upscaling alone.
-            # Accept an SR candidate only when the output is genuinely larger
-            # and all conservative preservation checks pass.
             if (
-                is_upscaled_output
-                and structure_safe
-                and color_safe
-                and noise_safe
+
+                relative_sharpness_improvement >= min_sharpness_improvement
+
+                and structure_similarity >= 0.90
+
+                and noise_change <= 1.50
+
+                and sharpness_multiplier <= MAX_SHARPNESS_MULTIPLIER
+
                 and brightness_safe
-                and sharpness_safe
+
+                and color_safe
+
             ):
+
                 accepted = True
+
                 reason = (
-                    "Super-resolution output retained at higher resolution; "
-                    "preservation checks passed (detail recovery not guaranteed)"
+
+                    "Blur restoration improved recoverable detail "
+
+                    "while preserving original structure"
+
                 )
+
             else:
+
                 accepted = False
-                reason = "Super-resolution candidate failed preservation checks"
+
+                reason = "Blur-restoration candidate failed acceptance checks"
 
         # 3. Other candidates must meet the generic quality threshold
 
@@ -1652,29 +1673,12 @@ def generate_interpretation(
 # --------------------------------------------------
 
 @router.post("/upload")
+
 async def upload_image(
+
     file: UploadFile = File(...)
+
 ):
-    image_bytes = await file.read()
-
-    # --------------------------------------------------
-    # DECODE ORIGINAL IMAGE
-    # --------------------------------------------------
-
-    np_arr = np.frombuffer(image_bytes, dtype=np.uint8)
-
-    original = cv2.imdecode(
-        np_arr,
-        cv2.IMREAD_COLOR
-    )
-
-    if original is None:
-        raise ValueError("Unable to decode uploaded image.")
-
-    save_debug_image("original", original)
-
-
-
 
     # --------------------------------------------------
 
@@ -1690,9 +1694,37 @@ async def upload_image(
 
     # )
 
+    image_bytes = await file.read()
 
+    # --------------------------------------------------
 
+    # DECODE ORIGINAL IMAGE
 
+    # --------------------------------------------------
+
+    np_arr = np.frombuffer(
+
+        image_bytes,
+
+        np.uint8
+
+    )
+
+    original = cv2.imdecode(
+
+        np_arr,
+
+        cv2.IMREAD_COLOR
+
+    )
+
+    if original is None:
+
+        raise ValueError(
+
+            "Unable to decode uploaded image."
+
+        )
 
     # --------------------------------------------------
 
@@ -1778,10 +1810,6 @@ async def upload_image(
 
         lesion_aware_candidates = []
 
-        # ADDED DIAGNOSTICS: compare raw SR with lesion-aware output.
-        # This only logs metrics and saves debug copies; selection is unchanged.
-        debug_dir = os.path.join(_APP_DIR, "debug_outputs")
-
         for candidate in candidates:
 
             candidate_mode = candidate["mode"]
@@ -1813,41 +1841,6 @@ async def upload_image(
                 )
 
             )
-
-            # ADDED DIAGNOSTICS: inspect super-resolution before/after blending.
-            if "Super Resolution" in candidate_mode or "Full-Resolution Enhancement" in candidate_mode:
-                os.makedirs(debug_dir, exist_ok=True)
-                raw_path = os.path.join(debug_dir, "raw_super_resolution.png")
-                blended_path = os.path.join(debug_dir, "lesion_aware_super_resolution.png")
-                cv2.imwrite(raw_path, candidate_image)
-                cv2.imwrite(blended_path, lesion_aware_image)
-
-                original_h, original_w = original.shape[:2]
-                raw_normalized = (
-                    cv2.resize(candidate_image, (original_w, original_h), interpolation=cv2.INTER_AREA)
-                    if candidate_image.shape[:2] != original.shape[:2]
-                    else candidate_image
-                )
-                blended_normalized = (
-                    cv2.resize(lesion_aware_image, (original_w, original_h), interpolation=cv2.INTER_AREA)
-                    if lesion_aware_image.shape[:2] != original.shape[:2]
-                    else lesion_aware_image
-                )
-
-                print("\n--- SUPER-RESOLUTION DIAGNOSTICS ---")
-                print("Original dimensions:", f"{original_w}x{original_h}")
-                print("Raw SR dimensions:", f"{candidate_image.shape[1]}x{candidate_image.shape[0]}")
-                print("Lesion-aware SR dimensions:", f"{lesion_aware_image.shape[1]}x{lesion_aware_image.shape[0]}")
-                print("Original sharpness:", calculate_sharpness(original))
-                print("Raw SR sharpness (native size):", calculate_sharpness(candidate_image))
-                print("Lesion-aware SR sharpness (native size):", calculate_sharpness(lesion_aware_image))
-                print("Raw SR sharpness (normalized):", calculate_sharpness(raw_normalized))
-                print("Lesion-aware SR sharpness (normalized):", calculate_sharpness(blended_normalized))
-                print("Raw SR color shift:", calculate_color_shift(original, raw_normalized))
-                print("Lesion-aware SR color shift:", calculate_color_shift(original, blended_normalized))
-                print("Raw SR debug image:", raw_path)
-                print("Lesion-aware SR debug image:", blended_path)
-                print("--- END SUPER-RESOLUTION DIAGNOSTICS ---\n")
 
             lesion_aware_candidates.append(
 
@@ -2235,11 +2228,13 @@ async def upload_image(
 
                     "lesion_detected",
 
-                    False
+                    lesion_info.get("detected", False)
 
                 )
 
             ),
+
+            "bbox": lesion_info.get("bbox"),
 
             "mask_reliable": bool(
 
