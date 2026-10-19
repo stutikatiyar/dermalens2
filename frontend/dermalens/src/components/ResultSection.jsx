@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { motion } from "framer-motion";
 
@@ -20,6 +20,8 @@ export default function ResultSection({
 
   enhancementAccepted,
 
+  lesionBbox,
+
 }) {
 
   const [zoomOriginal, setZoomOriginal] = useState(1);
@@ -27,7 +29,99 @@ export default function ResultSection({
   const [zoomResult, setZoomResult] = useState(1);
 
   const [compare, setCompare] = useState(50);
+  const [lesionCrops, setLesionCrops] = useState({ original: null, enhanced: null, error: "" });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadImage = (src) => new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Could not load an image for the lesion crop."));
+      img.src = src;
+    });
+
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+    const cropImage = (img, sx, sy, sw, sh) => {
+      // Render the crop at 3x its source dimensions for a larger close-up.
+      // This enlarges the crop for viewing; it does not create new medical detail.
+      const outputScale = 3;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(sw * outputScale));
+      canvas.height = Math.max(1, Math.round(sh * outputScale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas is unavailable.");
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.95);
+    };
+
+    async function buildCrops() {
+      const box = lesionBbox;
+      if (
+        !image || !enhanced || !box ||
+        !Number.isFinite(Number(box.x)) || !Number.isFinite(Number(box.y)) ||
+        !Number.isFinite(Number(box.width)) || !Number.isFinite(Number(box.height)) ||
+        Number(box.width) <= 0 || Number(box.height) <= 0
+      ) {
+        setLesionCrops({ original: null, enhanced: null, error: "" });
+        return;
+      }
+
+      try {
+        const [originalImg, enhancedImg] = await Promise.all([
+          loadImage(image),
+          loadImage(enhanced),
+        ]);
+
+        // The backend bbox is in original-image pixel coordinates. Clamp it to
+        // the loaded image and take a padded square around the lesion.
+        const boxX = Number(box.x);
+        const boxY = Number(box.y);
+        const boxW = Number(box.width);
+        const boxH = Number(box.height);
+        const centerX = boxX + boxW / 2;
+        const centerY = boxY + boxH / 2;
+        const side = Math.min(
+          Math.max(boxW, boxH) * 3,
+          originalImg.naturalWidth,
+          originalImg.naturalHeight
+        );
+        const sx = clamp(centerX - side / 2, 0, originalImg.naturalWidth - side);
+        const sy = clamp(centerY - side / 2, 0, originalImg.naturalHeight - side);
+
+        // Apply the same proportional crop if the processed image dimensions differ.
+        const scaleX = enhancedImg.naturalWidth / originalImg.naturalWidth;
+        const scaleY = enhancedImg.naturalHeight / originalImg.naturalHeight;
+        const originalCrop = cropImage(originalImg, sx, sy, side, side);
+        const enhancedCrop = cropImage(
+          enhancedImg,
+          sx * scaleX,
+          sy * scaleY,
+          side * scaleX,
+          side * scaleY
+        );
+
+        if (!cancelled) {
+          setLesionCrops({ original: originalCrop, enhanced: enhancedCrop, error: "" });
+        }
+      } catch (error) {
+        console.error("Lesion crop generation failed:", error);
+        if (!cancelled) {
+          setLesionCrops({
+            original: null,
+            enhanced: null,
+            error: error?.message || "Could not create lesion close-up.",
+          });
+        }
+      }
+    }
+
+    buildCrops();
+    return () => { cancelled = true; };
+  }, [image, enhanced, lesionBbox]);
 
 
   const accepted =
@@ -402,6 +496,47 @@ export default function ResultSection({
       </div>
 
 
+
+      {/* LESION CLOSE-UP */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.12 }}
+        className="mt-8 rounded-[28px] border border-white/10 bg-[#071225]/80 backdrop-blur-xl p-5 md:p-7"
+      >
+        <div className="mb-5">
+          <p className="text-white font-bold text-lg">Lesion close-up comparison</p>
+          <p className="text-slate-400 text-sm mt-1">
+            The same detected region, enlarged for visual inspection. Enlarging does not recover missing image detail.
+          </p>
+        </div>
+
+        {lesionCrops.original && lesionCrops.enhanced ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+              <p className="text-white text-sm font-semibold mb-3">Original crop</p>
+              <div className="h-64 md:h-72 rounded-xl bg-black overflow-hidden flex items-center justify-center">
+                <img src={lesionCrops.original} alt="Lesion crop from original image" className="max-w-full max-h-full object-contain" />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-cyan-400/20 bg-black/40 p-3">
+              <p className="text-white text-sm font-semibold mb-3">
+                {accepted ? "Enhanced crop" : "Original crop (enhancement not selected)"}
+              </p>
+              <div className="h-64 md:h-72 rounded-xl bg-black overflow-hidden flex items-center justify-center">
+                <img src={lesionCrops.enhanced} alt="Same lesion crop from DermaLens result" className="max-w-full max-h-full object-contain" />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-slate-400 text-sm">
+            {lesionCrops.error || "A lesion bounding box was not returned. Ensure the backend response includes segmentation.bbox."}
+          </p>
+        )}
+        <p className="text-amber-300/80 text-xs mt-4">
+          For image-quality inspection only; this is not a diagnosis.
+        </p>
+      </motion.div>
 
       {/* COMPARE */}
 
