@@ -22,6 +22,8 @@ export default function ResultSection({
 
   lesionBbox,
 
+  comparison = [],
+
 }) {
 
   const [zoomOriginal, setZoomOriginal] = useState(1);
@@ -670,7 +672,59 @@ export default function ResultSection({
 
 
 
-      {/* QUALITY CHANGE */}
+
+      {/* MODEL COMPARISON */}
+      {comparison.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-8 rounded-[28px] border border-white/10 bg-[#071225]/80 backdrop-blur-xl p-5 md:p-7"
+        >
+          <div className="mb-5">
+            <p className="text-white text-xl font-bold">Model comparison lab</p>
+            <p className="text-slate-400 text-sm mt-1">
+              Every available candidate was generated from the same upload. Metrics are measured after resizing to the original resolution; they are indicators, not proof of medical accuracy.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {comparison.map((item, index) => (
+              <div key={`${item.name}-${index}`} className="rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+                <div className="p-3 border-b border-white/10">
+                  <p className="text-white font-semibold">{item.name}</p>
+                  <p className="text-slate-500 text-xs mt-1">
+                    {item.width && item.height ? `${item.width} × ${item.height}` : "No output"}
+                    {item.elapsed_ms != null ? ` · ${(item.elapsed_ms / 1000).toFixed(2)} s` : ""}
+                  </p>
+                </div>
+                {item.image ? (
+                  <div className="aspect-[4/3] bg-black flex items-center justify-center">
+                    <img
+                      src={`data:image/jpeg;base64,${item.image}`}
+                      alt={`${item.name} output`}
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-[4/3] bg-black/40 flex items-center justify-center p-5">
+                    <p className="text-amber-300 text-sm text-center">{item.error || "Model output unavailable"}</p>
+                  </div>
+                )}
+                <div className="p-3 grid grid-cols-3 gap-2 border-t border-white/10">
+                  <div><p className="text-slate-500 text-[11px]">Sharpness</p><p className="text-white text-sm">{item.sharpness != null ? Number(item.sharpness).toFixed(2) : "—"}</p></div>
+                  <div><p className="text-slate-500 text-[11px]">Contrast</p><p className="text-white text-sm">{item.contrast != null ? Number(item.contrast).toFixed(2) : "—"}</p></div>
+                  <div><p className="text-slate-500 text-[11px]">Brightness</p><p className="text-white text-sm">{item.brightness != null ? Number(item.brightness).toFixed(2) : "—"}</p></div>
+                </div>
+                {item.note && <p className="px-3 pb-3 text-slate-500 text-xs leading-relaxed">{item.note}</p>}
+              </div>
+            ))}
+          </div>
+          <p className="text-amber-300/80 text-xs mt-4">
+            Higher sharpness or contrast does not necessarily mean better restoration. Review lesion boundaries and artifacts against the original.
+          </p>
+        </motion.div>
+      )}
+
+            {/* QUALITY CHANGE */}
 
       <motion.div
 
