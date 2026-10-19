@@ -17,6 +17,7 @@ export default function UploadBox() {
   const [mode, setMode] = useState("");
   const [insights, setInsights] = useState([]);
   const [enhancementAccepted, setEnhancementAccepted] = useState(true);
+  const [lesionBbox, setLesionBbox] = useState(null);
 
   async function handleChange(e) {
     const file = e.target.files[0];
@@ -29,6 +30,7 @@ export default function UploadBox() {
     setMode("");
     setInsights([]);
     setEnhancementAccepted(true);
+    setLesionBbox(null);
     setImage(URL.createObjectURL(file));
 
     try {
@@ -44,6 +46,7 @@ export default function UploadBox() {
       }
 
       setEnhanced(`data:image/jpeg;base64,${data.enhanced_image}`);
+      setLesionBbox(data.segmentation?.bbox ?? null);
       setMetrics(data.metrics);
       setConfidence(data.confidence);
       setMode(data.mode || "");
@@ -87,6 +90,7 @@ export default function UploadBox() {
           mode={mode}
           insights={insights}
           enhancementAccepted={enhancementAccepted}
+          lesionBbox={lesionBbox}
         />
       )}
     </div>
