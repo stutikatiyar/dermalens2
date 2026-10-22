@@ -39,6 +39,8 @@ from app.ml.lesion_aware import (
 
 )
 
+from app.metrics_calculator import compute_all_metrics
+
 router = APIRouter()
 
 # --------------------------------------------------
@@ -486,33 +488,57 @@ def evaluate_candidate(
     # --------------------------------------------------
 
     # CANDIDATE METRICS (RESOLUTION-NORMALIZED)
+
     # --------------------------------------------------
+
     # Compare candidates at the original resolution. This prevents a 2x
+
     # EDSR output from receiving misleading metric values just because it
+
     # has more pixels. The original `candidate` remains unchanged for output.
 
     original_height, original_width = original.shape[:2]
+
     if candidate.shape[:2] != original.shape[:2]:
+
         candidate_for_metrics = cv2.resize(
+
             candidate,
+
             (original_width, original_height),
+
             interpolation=cv2.INTER_AREA
+
         )
+
         print(
+
             "METRICS -> normalized candidate resolution:",
+
             f"{candidate.shape[1]}x{candidate.shape[0]}",
+
             "->",
+
             f"{original_width}x{original_height}"
+
         )
+
     else:
+
         candidate_for_metrics = candidate
 
     sharp_after = calculate_sharpness(candidate_for_metrics)
+
     contrast_after = calculate_contrast(candidate_for_metrics)
+
     brightness_after = calculate_brightness(candidate_for_metrics)
+
     quality_after = quality_score(
+
         sharp_after, contrast_after, brightness_after
+
     )
+
     noise_after = calculate_noise_estimate(candidate_for_metrics)
 
     # IMPROVEMENTS
@@ -764,33 +790,59 @@ def evaluate_candidate(
         # 1. Contrast-enhancement candidates
 
         if "Contrast Enhanced" in candidate_mode:
+
             relative_sharpness_improvement = (
+
                 (sharp_after - sharp_before) / sharp_before
+
                 if sharp_before > 0 else 0.0
+
             )
 
             if (
+
                 # For blurry images, allow a contrast candidate when its
+
                 # quality score does not regress and sharpness improves
+
                 # measurably; the remaining safety checks must still pass.
+
                 quality_improvement >= 0.0
+
                 and relative_sharpness_improvement >= 0.01
+
                 and structure_safe
+
                 and color_safe
+
                 and noise_safe
+
                 and brightness_safe
+
                 and sharpness_safe
+
             ):
+
                 accepted = True
+
                 reason = (
+
                     "Contrast candidate accepted: quality did not decrease, "
+
                     "sharpness improved by at least 1%, and safety checks passed"
+
                 )
+
             else:
+
                 accepted = False
+
                 reason = (
+
                     "Contrast candidate rejected: sharpness improvement or "
+
                     "one or more safety checks did not pass"
+
                 )
 
         # 2. Super-resolution / blur-restoration candidates
@@ -1247,44 +1299,42 @@ def select_best_candidate(original,candidates):
 
     # --------------------------------------------------
 
-    # if len(valid_candidates) == 0:
-
-    #     print(
-
-    #         "SELECTION → no valid enhancement "
-
-    #         "candidate found"
-
-    #     )
-
-    #     return (
-
-    #         original,
-
-    #         "No Enhancement"
-
-    #     )
-
     if len(valid_candidates) == 0:
+
         print("SELECTION: no valid enhancement candidate found")
+
         print("\n--- CANDIDATE REJECTION REPORT ---")
 
         for item in evaluated:
+
             result = item["evaluation"]
+
             print(
+
                 item["candidate"]["mode"],
+
                 "| accepted:", result["accepted"],
+
                 "| reason:", result["reason"],
+
                 "| sharpness:", result["sharpness_before"],
+
                 "->", result["sharpness_after"],
+
                 "| contrast:", result["contrast_before"],
+
                 "->", result["contrast_after"],
+
                 "| quality improvement:", result["quality_improvement"],
+
                 "| structure:", result["structure_similarity"],
+
                 "| noise change:", result["noise_change"],
+
             )
 
         print("--- END REPORT ---")
+
         return original, "No Enhancement"
 
     # --------------------------------------------------
@@ -1687,14 +1737,6 @@ async def upload_image(
 
     # --------------------------------------------------
 
-    # image_bytes = await file.read()
-
-    # original, candidates, _ = enhance_image(
-
-    #     image_bytes
-
-    # )
-
     image_bytes = await file.read()
 
     # --------------------------------------------------
@@ -1799,14 +1841,6 @@ async def upload_image(
 
     # --------------------------------------------------
 
-    # If the segmentation mask passes the runtime reliability
-
-    # check, enhancement candidates are applied primarily to
-
-    # the predicted lesion region. If the mask is unreliable,
-
-    # the existing whole-image candidates are preserved.
-
     if lesion_aware_enabled:
 
         lesion_aware_candidates = []
@@ -1816,8 +1850,6 @@ async def upload_image(
             candidate_mode = candidate["mode"]
 
             candidate_image = candidate["image"]
-
-            # Never modify the original image.
 
             if candidate_mode == "Original":
 
@@ -1866,90 +1898,6 @@ async def upload_image(
         candidates = lesion_aware_candidates
 
     # --------------------------------------------------
-    # MODEL COMPARISON OUTPUTS (for UI only; does not affect selection)
-    # --------------------------------------------------
-    # Keep the production selection logic independent from this comparison list.
-    comparison_candidates = []
-    comparison_started = perf_counter()
-
-    def _comparison_item(name, candidate_image, elapsed_ms=None, note=""):
-        if candidate_image is None:
-            return None
-        # Metrics are normalized to the original resolution for fair comparison.
-        h0, w0 = original.shape[:2]
-        if candidate_image.shape[:2] != original.shape[:2]:
-            metric_image = cv2.resize(
-                candidate_image, (w0, h0), interpolation=cv2.INTER_AREA
-            )
-        else:
-            metric_image = candidate_image
-
-        ok, encoded = cv2.imencode(".jpg", candidate_image)
-        if not ok:
-            return None
-        return {
-            "name": name,
-            "image": base64.b64encode(encoded).decode("utf-8"),
-            "width": int(candidate_image.shape[1]),
-            "height": int(candidate_image.shape[0]),
-            "elapsed_ms": round(float(elapsed_ms), 2) if elapsed_ms is not None else None,
-            "sharpness": float(calculate_sharpness(metric_image)),
-            "contrast": float(calculate_contrast(metric_image)),
-            "brightness": float(calculate_brightness(metric_image)),
-            "note": note,
-        }
-
-    # Original baseline.
-    original_item = _comparison_item("Original", original, 0, "Untouched upload")
-    if original_item:
-        comparison_candidates.append(original_item)
-
-    # Existing OpenCV and EDSR/fallback candidates generated by enhancement.py.
-    for candidate in candidates:
-        candidate_name = candidate.get("mode", "Enhancement candidate")
-        if candidate_name == "Original":
-            continue
-        candidate_info = candidate.get("method_info") or {}
-        candidate_elapsed = candidate_info.get("elapsed_ms")
-        if candidate_elapsed is None:
-            candidate_elapsed = None
-        item = _comparison_item(
-            candidate_name,
-            candidate.get("image"),
-            candidate_elapsed,
-            candidate.get("reason", ""),
-        )
-        if item:
-            comparison_candidates.append(item)
-
-    # MPRNet is run independently. Failure is reported to the UI without
-    # preventing the existing DermaLens upload result from working.
-    try:
-        mprnet_image, mprnet_info = enhance_mprnet_bgr(original)
-        mprnet_item = _comparison_item(
-            "MPRNet Deblurring",
-            mprnet_image,
-            mprnet_info.get("elapsed_ms"),
-            "Experimental deblurring model; inspect for artifacts.",
-        )
-        if mprnet_item:
-            comparison_candidates.append(mprnet_item)
-    except Exception as exc:
-        print(f"MODEL COMPARISON -> MPRNet unavailable: {type(exc).__name__}: {exc}")
-        comparison_candidates.append({
-            "name": "MPRNet Deblurring",
-            "error": f"{type(exc).__name__}: {exc}",
-            "image": None,
-            "elapsed_ms": None,
-            "note": "MPRNet comparison failed; the main result can still be returned.",
-        })
-
-    print(
-        "MODEL COMPARISON -> candidates:",
-        [item["name"] for item in comparison_candidates]
-    )
-
-    # --------------------------------------------------
 
     # SELECT BEST ENHANCEMENT
 
@@ -1968,12 +1916,214 @@ async def upload_image(
     )
 
     print("SELECTED MODE:", final_mode)
+
     print("FINAL IMAGE IS ORIGINAL:", final_image is original)
+
     print("FINAL IMAGE SHAPE:", final_image.shape)
 
     enhancement_accepted = (
 
         final_mode != "No Enhancement"
+
+    )
+
+    # --------------------------------------------------
+
+    # MODEL CONFIDENCE
+
+    # --------------------------------------------------
+
+    confidence_before = predict_confidence(
+
+        original
+
+    )
+
+    confidence_after = predict_confidence(
+
+        final_image
+
+    )
+
+    confidence_delta = (
+
+        confidence_after -
+
+        confidence_before
+
+    )
+
+    # --------------------------------------------------
+
+    # DERMALENS RELIABILITY METRICS CALCULATOR
+
+    # --------------------------------------------------
+
+    detailed_metrics = compute_all_metrics(
+
+        original_bgr=original,
+
+        processed_bgr=final_image,
+
+        mask=lesion_mask if lesion_aware_enabled else None,
+
+        orig_confidence=confidence_before,
+
+        proc_confidence=confidence_after
+
+    )
+
+    # --------------------------------------------------
+
+    # MODEL COMPARISON OUTPUTS
+
+    # --------------------------------------------------
+
+    comparison_candidates = []
+
+    comparison_started = perf_counter()
+
+    def _comparison_item(name, candidate_image, elapsed_ms=None, note=""):
+
+        if candidate_image is None:
+
+            return None
+
+        h0, w0 = original.shape[:2]
+
+        if candidate_image.shape[:2] != original.shape[:2]:
+
+            metric_image = cv2.resize(
+
+                candidate_image, (w0, h0), interpolation=cv2.INTER_AREA
+
+            )
+
+        else:
+
+            metric_image = candidate_image
+
+        ok, encoded = cv2.imencode(".jpg", candidate_image)
+
+        if not ok:
+
+            return None
+
+        cand_metrics = compute_all_metrics(
+
+            original_bgr=original,
+
+            processed_bgr=metric_image,
+
+            mask=lesion_mask if lesion_aware_enabled else None,
+
+            orig_confidence=confidence_before,
+
+            proc_confidence=predict_confidence(candidate_image)
+
+        )
+
+        return {
+
+            "name": name,
+
+            "image": base64.b64encode(encoded).decode("utf-8"),
+
+            "width": int(candidate_image.shape[1]),
+
+            "height": int(candidate_image.shape[0]),
+
+            "elapsed_ms": round(float(elapsed_ms), 2) if elapsed_ms is not None else None,
+
+            "sharpness": float(calculate_sharpness(metric_image)),
+
+            "contrast": float(calculate_contrast(metric_image)),
+
+            "brightness": float(calculate_brightness(metric_image)),
+
+            "detailed_metrics": cand_metrics,
+
+            "note": note,
+
+        }
+
+    original_item = _comparison_item("Original", original, 0, "Untouched upload")
+
+    if original_item:
+
+        comparison_candidates.append(original_item)
+
+    for candidate in candidates:
+
+        candidate_name = candidate.get("mode", "Enhancement candidate")
+
+        if candidate_name == "Original":
+
+            continue
+
+        candidate_info = candidate.get("method_info") or {}
+
+        candidate_elapsed = candidate_info.get("elapsed_ms")
+
+        item = _comparison_item(
+
+            candidate_name,
+
+            candidate.get("image"),
+
+            candidate_elapsed,
+
+            candidate.get("reason", ""),
+
+        )
+
+        if item:
+
+            comparison_candidates.append(item)
+
+    try:
+
+        mprnet_image, mprnet_info = enhance_mprnet_bgr(original)
+
+        mprnet_item = _comparison_item(
+
+            "MPRNet Deblurring",
+
+            mprnet_image,
+
+            mprnet_info.get("elapsed_ms"),
+
+            "Experimental deblurring model; inspect for artifacts.",
+
+        )
+
+        if mprnet_item:
+
+            comparison_candidates.append(mprnet_item)
+
+    except Exception as exc:
+
+        print(f"MODEL COMPARISON -> MPRNet unavailable: {type(exc).__name__}: {exc}")
+
+        comparison_candidates.append({
+
+            "name": "MPRNet Deblurring",
+
+            "error": f"{type(exc).__name__}: {exc}",
+
+            "image": None,
+
+            "elapsed_ms": None,
+
+            "note": "MPRNet comparison failed; the main result can still be returned.",
+
+        })
+
+    print(
+
+        "MODEL COMPARISON -> candidates:",
+
+        [item["name"] for item in comparison_candidates]
 
     )
 
@@ -2173,66 +2323,6 @@ async def upload_image(
 
     # --------------------------------------------------
 
-    # MODEL CONFIDENCE
-
-    # --------------------------------------------------
-
-    #
-
-    # Measured AFTER image-quality selection.
-
-    #
-
-    # It DOES NOT decide enhancement acceptance.
-
-    #
-
-    confidence_before = predict_confidence(
-
-        original
-
-    )
-
-    confidence_after = predict_confidence(
-
-        final_image
-
-    )
-
-    confidence_delta = (
-
-        confidence_after -
-
-        confidence_before
-
-    )
-
-    print(
-
-        "CONF BEFORE:",
-
-        confidence_before
-
-    )
-
-    print(
-
-        "CONF AFTER:",
-
-        confidence_after
-
-    )
-
-    print(
-
-        "CONF DELTA:",
-
-        confidence_delta
-
-    )
-
-    # --------------------------------------------------
-
     # INTERPRETATION
 
     # --------------------------------------------------
@@ -2408,6 +2498,10 @@ async def upload_image(
                 quality_improvement,
 
         },
+
+        "detailed_metrics":
+
+            detailed_metrics,
 
         "confidence": {
 
