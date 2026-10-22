@@ -12,11 +12,12 @@ pillow==12.2.0
 pydantic==2.13.3
 pydantic_core==2.46.3
 python-multipart==0.0.27
+requests==2.32.5
+scikit-image==0.26.0
 starlette==1.0.0
+tqdm==4.67.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.46.0
-torch
-torchvision
-tqdm
-scikit-image
+torch==2.8.0
+torchvision==0.23.0
