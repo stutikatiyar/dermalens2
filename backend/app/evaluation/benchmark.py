@@ -1,5 +1,6 @@
 import os
 import csv
+import time
 import cv2
 import requests
 import numpy as np
@@ -17,8 +18,9 @@ INPUT_FOLDER = "benchmark_images"
 # Folder where degraded test images will be saved
 DEGRADED_FOLDER = "benchmark_degraded"
 
-# Final benchmark CSV
-OUTPUT_CSV = "benchmark_results.csv"
+# Timestamped benchmark CSV to prevent overwriting previous experiment runs
+TIMESTAMP = time.strftime("%Y%m%d_%H%M%S")
+OUTPUT_CSV = f"benchmark_results_{TIMESTAMP}.csv"
 
 
 # ============================================================
@@ -27,21 +29,38 @@ OUTPUT_CSV = "benchmark_results.csv"
 
 def severe_blur(image):
     """
-    Simulates severe focus/motion blur.
+    Simulates severe focus/motion blur using Gaussian blur kernel.
+    
+    Parameters:
+        image (numpy.ndarray): Input BGR image array.
+        
+    Returns:
+        numpy.ndarray: Blurred image array.
     """
-    return cv2.GaussianBlur(image, (15, 15), 0)
+    kernel_size = (15, 15)
+    sigma_x = 0
+    return cv2.GaussianBlur(image, kernel_size, sigma_x)
 
 
 def low_resolution(image):
     """
     Simulates a low-resolution smartphone image by
-    downscaling and then resizing back up.
+    downscaling and then resizing back up to original dimensions.
+    
+    Parameters:
+        image (numpy.ndarray): Input BGR image array.
+        
+    Returns:
+        numpy.ndarray: Resolution-degraded image array.
     """
     height, width = image.shape[:2]
 
+    small_width = max(1, width // 4)
+    small_height = max(1, height // 4)
+
     small = cv2.resize(
         image,
-        (max(1, width // 4), max(1, height // 4)),
+        (small_width, small_height),
         interpolation=cv2.INTER_AREA,
     )
 
@@ -54,13 +73,21 @@ def low_resolution(image):
 
 def add_noise(image):
     """
-    Adds Gaussian sensor noise.
+    Adds Gaussian sensor noise to simulate poor sensor quality or high ISO.
+    
+    Parameters:
+        image (numpy.ndarray): Input BGR image array.
+        
+    Returns:
+        numpy.ndarray: Noisy image array.
     """
     image_float = image.astype(np.float32)
 
+    mean = 0
+    sigma = 25
     noise = np.random.normal(
-        0,
-        25,
+        mean,
+        sigma,
         image.shape
     ).astype(np.float32)
 
@@ -71,10 +98,18 @@ def add_noise(image):
 
 def underexposure(image):
     """
-    Simulates an underexposed / poorly illuminated image.
+    Simulates an underexposed / poorly illuminated dermatological image.
+    
+    Parameters:
+        image (numpy.ndarray): Input BGR image array.
+        
+    Returns:
+        numpy.ndarray: Darkness-degraded image array.
     """
+    scaling_factor = 0.35
+    
     return np.clip(
-        image.astype(np.float32) * 0.35,
+        image.astype(np.float32) * scaling_factor,
         0,
         255,
     ).astype(np.uint8)
@@ -82,10 +117,18 @@ def underexposure(image):
 
 def overexposure(image):
     """
-    Simulates an overexposed image.
+    Simulates an overexposed or flash-blown image.
+    
+    Parameters:
+        image (numpy.ndarray): Input BGR image array.
+        
+    Returns:
+        numpy.ndarray: Overexposed image array.
     """
+    scaling_factor = 1.7
+    
     return np.clip(
-        image.astype(np.float32) * 1.7,
+        image.astype(np.float32) * scaling_factor,
         0,
         255,
     ).astype(np.uint8)
@@ -93,12 +136,20 @@ def overexposure(image):
 
 def jpeg_compression(image):
     """
-    Simulates heavy JPEG compression.
+    Simulates heavy JPEG compression artifacts.
+    
+    Parameters:
+        image (numpy.ndarray): Input BGR image array.
+        
+    Returns:
+        numpy.ndarray: Compressed image array.
     """
+    quality_setting = 20
+    
     success, encoded = cv2.imencode(
         ".jpg",
         image,
-        [cv2.IMWRITE_JPEG_QUALITY, 20],
+        [cv2.IMWRITE_JPEG_QUALITY, quality_setting],
     )
 
     if not success:
@@ -131,8 +182,15 @@ DEGRADATIONS = {
 def process_with_dermalens(image_path):
     """
     Sends an image to the existing DermaLens /upload endpoint
-    and returns the JSON response.
+    and returns the complete JSON response payload.
+    
+    Parameters:
+        image_path (str): File system path to test image.
+        
+    Returns:
+        dict: Parsed JSON response dictionary.
     """
+    timeout_limit = 600
 
     with open(image_path, "rb") as image_file:
 
@@ -147,7 +205,7 @@ def process_with_dermalens(image_path):
         response = requests.post(
             API_URL,
             files=files,
-            timeout=180,
+            timeout=timeout_limit,
         )
 
     response.raise_for_status()
@@ -160,6 +218,13 @@ def process_with_dermalens(image_path):
 # ============================================================
 
 def save_image(image, path):
+    """
+    Saves an image array safely to disk.
+    
+    Parameters:
+        image (numpy.ndarray): Image array to write.
+        path (str): Target output file path.
+    """
     success = cv2.imwrite(path, image)
 
     if not success:
@@ -169,10 +234,36 @@ def save_image(image, path):
 
 
 # ============================================================
-# MAIN BENCHMARK
+# FORMATTING UTILITIES FOR SAFE LOGGING
+# ============================================================
+
+def format_float_safe(value, precision=2, default="N/A"):
+    """
+    Safely formats float values for print output without triggering NoneType crashes.
+    
+    Parameters:
+        value (float/None): Numerical value to format.
+        precision (int): Decimal places to display.
+        default (str): Fallback text when value is None.
+        
+    Returns:
+        str: Formatted numeric string or default representation.
+    """
+    if value is None:
+        return default
+    return f"{value:.{precision}f}"
+
+
+# ============================================================
+# MAIN BENCHMARK EXECUTION
 # ============================================================
 
 def main():
+    """
+    Main benchmark execution runner. Iterates through input test images,
+    applies synthetic degradation conditions, triggers API evaluations,
+    extracts performance metrics, and logs complete experiment CSV records.
+    """
 
     os.makedirs(
         INPUT_FOLDER,
@@ -207,7 +298,7 @@ def main():
     results = []
 
     print("\n==========================================")
-    print("        DERMALENS BENCHMARK")
+    print("        DERMALENS BENCHMARK RUNNER        ")
     print("==========================================")
 
     print(
@@ -227,7 +318,7 @@ def main():
 
 
     # --------------------------------------------------------
-    # Process every image
+    # Process every image in input directory
     # --------------------------------------------------------
 
     for image_index, filename in enumerate(
@@ -252,17 +343,17 @@ def main():
 
         print(
             f"\n[{image_index}/{len(image_files)}] "
-            f"{filename}"
+            f"Processing Source Image: {filename}"
         )
 
         # ----------------------------------------------------
-        # Apply every degradation
+        # Apply every degradation condition systematically
         # ----------------------------------------------------
 
         for condition, degradation_function in DEGRADATIONS.items():
 
             print(
-                f"  → Testing {condition}..."
+                f"  → Testing Condition: {condition}..."
             )
 
             try:
@@ -271,7 +362,7 @@ def main():
                     original.copy()
                 )
 
-                # Create safe filename
+                # Create safe filename representing condition
                 condition_name = (
                     condition
                     .lower()
@@ -294,7 +385,7 @@ def main():
                 )
 
                 # ------------------------------------------------
-                # Send degraded image to DermaLens
+                # Send degraded image to DermaLens API
                 # ------------------------------------------------
 
                 data = process_with_dermalens(
@@ -302,7 +393,7 @@ def main():
                 )
 
                 # ------------------------------------------------
-                # Extract metrics
+                # Extract quality metrics directly from response
                 # ------------------------------------------------
 
                 metrics = data.get(
@@ -321,6 +412,11 @@ def main():
 
                 quality_after = metrics.get(
                     "quality_after"
+                )
+
+                # Extract exact relative quality improvement from API response
+                quality_improvement = metrics.get(
+                    "quality_improvement"
                 )
 
                 confidence_before = confidence.get(
@@ -344,7 +440,7 @@ def main():
                 )
 
                 # ------------------------------------------------
-                # Convert decision to readable text
+                # Convert acceptance decision to readable string
                 # ------------------------------------------------
 
                 if accepted is True:
@@ -357,7 +453,7 @@ def main():
                     decision = "Unknown"
 
                 # ------------------------------------------------
-                # Store result
+                # Store full experimental record
                 # ------------------------------------------------
 
                 results.append(
@@ -374,11 +470,7 @@ def main():
                         ),
 
                         "Quality Improvement": (
-                            quality_after
-                            - quality_before
-                            if quality_before is not None
-                            and quality_after is not None
-                            else None
+                            quality_improvement
                         ),
 
                         "AI Confidence Before": (
@@ -403,29 +495,35 @@ def main():
                     }
                 )
 
+                # Print progress with safe formatting helpers
+                q_b_str = format_float_safe(quality_before, 2)
+                q_a_str = format_float_safe(quality_after, 2)
+                c_b_str = format_float_safe(confidence_before, 4)
+                c_a_str = format_float_safe(confidence_after, 4)
+
                 print(
-                    f"     Quality: "
-                    f"{quality_before:.2f}"
+                    f"     Quality Score: "
+                    f"{q_b_str}"
                     f" → "
-                    f"{quality_after:.2f}"
+                    f"{q_a_str}"
                 )
 
                 print(
                     f"     AI Confidence: "
-                    f"{confidence_before:.4f}"
+                    f"{c_b_str}"
                     f" → "
-                    f"{confidence_after:.4f}"
+                    f"{c_a_str}"
                 )
 
                 print(
-                    f"     Decision: "
+                    f"     Decision Status: "
                     f"{decision}"
                 )
 
             except Exception as error:
 
                 print(
-                    f"     ERROR: {error}"
+                    f"     ERROR encountered during processing: {error}"
                 )
 
                 results.append(
@@ -446,13 +544,13 @@ def main():
 
 
     # ========================================================
-    # SAVE CSV
+    # SAVE BENCHMARK CSV RECORD
     # ========================================================
 
     if not results:
 
         print(
-            "\nNo benchmark results generated."
+            "\nNo benchmark results were generated during this run."
         )
 
         return
@@ -480,7 +578,7 @@ def main():
 
 
     # ========================================================
-    # SUMMARY
+    # SUMMARY ANALYSIS REPORTING
     # ========================================================
 
     valid_results = [
@@ -489,34 +587,47 @@ def main():
         if result["Decision"] != "ERROR"
     ]
 
-    accepted = sum(
+    error_count = sum(
+        result["Decision"] == "ERROR"
+        for result in results
+    )
+
+    accepted_count = sum(
         result["Decision"] == "Accepted"
         for result in valid_results
     )
 
-    rejected = sum(
+    rejected_count = sum(
         result["Decision"] == "Rejected"
         for result in valid_results
     )
 
     print("\n==========================================")
-    print("        BENCHMARK COMPLETE")
+    print("        BENCHMARK RUN SUMMARY COMPLETE     ")
     print("==========================================")
 
     print(
-        f"Total tests: {len(valid_results)}"
+        f"Total Tests Executed: {len(results)}"
     )
 
     print(
-        f"Accepted: {accepted}"
+        f"Valid Tests Processed: {len(valid_results)}"
     )
 
     print(
-        f"Rejected: {rejected}"
+        f"Enhancements Accepted: {accepted_count}"
     )
 
     print(
-        f"Results saved to: {OUTPUT_CSV}"
+        f"Enhancements Rejected: {rejected_count}"
+    )
+
+    print(
+        f"Errors Encounted: {error_count}"
+    )
+
+    print(
+        f"Experiment output recorded to: {OUTPUT_CSV}"
     )
 
     print("==========================================\n")
