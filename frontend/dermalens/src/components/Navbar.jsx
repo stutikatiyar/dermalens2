@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 
 function navigate(path) {
@@ -51,7 +50,7 @@ function Navbar() {
   const linkClass = (path) =>
     `transition ${
       currentPath === path
-        ? "text-white"
+        ? "text-cyan-300 font-semibold"
         : "text-slate-400 hover:text-white"
     }`;
 
@@ -93,6 +92,15 @@ function Navbar() {
           >
             How It Works
           </button>
+
+          {/* Added Metrics Navigation Link */}
+          <a
+            href="/metrics"
+            onClick={(e) => handleNavigation(e, "/metrics")}
+            className={linkClass("/metrics")}
+          >
+            Metrics
+          </a>
 
           <a
             href="/evaluation"

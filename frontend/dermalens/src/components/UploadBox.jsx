@@ -9,7 +9,7 @@ import HowItWorks from "./HowItWorks";
 import { uploadImage } from "../api/api";
 
 export default function UploadBox() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); 
   const [image, setImage] = useState(null);
   const [enhanced, setEnhanced] = useState(null);
   const [metrics, setMetrics] = useState(null);

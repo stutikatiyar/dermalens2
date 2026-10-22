@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Home from "./pages/Home";
 import Evaluation from "./pages/Evaluation";
 import Milestones from "./pages/Milestones";
+import MetricsPage from "./components/MetricsPage"; // Adjust path if placed in ./pages/MetricsPage
 
 function getPage() {
   const path = window.location.pathname.replace(/\/$/, "") || "/";
@@ -12,6 +13,10 @@ function getPage() {
 
   if (path === "/milestones") {
     return "milestones";
+  }
+
+  if (path === "/metrics") {
+    return "metrics";
   }
 
   return "home";
@@ -38,6 +43,8 @@ function App() {
       document.title = "DermaLens | Evaluation";
     } else if (page === "milestones") {
       document.title = "DermaLens | Milestones";
+    } else if (page === "metrics") {
+      document.title = "DermaLens | Reliability Metrics";
     } else {
       document.title = "DermaLens";
     }
@@ -49,6 +56,10 @@ function App() {
 
   if (page === "milestones") {
     return <Milestones />;
+  }
+
+  if (page === "metrics") {
+    return <MetricsPage />;
   }
 
   return <Home />;
