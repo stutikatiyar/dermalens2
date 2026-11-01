@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/Adaptive%20Restoration-E91E63?style=for-the-badge" alt="Adaptive restoration" />
   <img src="https://img.shields.io/badge/Quality--Aware%20Validation-8E24AA?style=for-the-badge" alt="Quality-aware validation" />
   <img src="https://img.shields.io/badge/Downstream%20AI%20Analysis-3949AB?style=for-the-badge" alt="Downstream AI analysis" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
 </p>
 
 <p>
@@ -22,6 +23,7 @@
 </p>
 
 <p>
+  <img src="https://img.shields.io/badge/MPRNet-Deblurring-E91E63?style=flat-square" alt="MPRNet deblurring" />
   <img src="https://img.shields.io/badge/Real--ESRGAN-8E24AA?style=flat-square" alt="Real-ESRGAN" />
   <img src="https://img.shields.io/badge/EDSR-3949AB?style=flat-square" alt="EDSR" />
   <img src="https://img.shields.io/badge/ResNet18-E91E63?style=flat-square" alt="ResNet18" />
@@ -110,7 +112,7 @@ The goal is not simply to make an image look sharper.
 
 | 1. Analyze | 2. Generate | 3. Validate | 4. Decide |
 |:---:|:---:|:---:|:---:|
-| Brightness, sharpness, contrast and noise of the original | Targeted candidates: illumination, contrast, denoising, Real-ESRGAN, EDSR | Each candidate is checked against the original for structure, color and noise | Best valid candidate is used; otherwise the **original is preserved** |
+| Brightness, sharpness, contrast and noise of the original | Targeted candidates: illumination, contrast, denoising, MPRNet deblurring, Real-ESRGAN, EDSR | Each candidate is checked against the original for structure, color and noise | Best valid candidate is used; otherwise the **original is preserved** |
 
 ---
 
@@ -198,7 +200,7 @@ Instead of immediately modifying the uploaded image, the system:
 ```mermaid
 flowchart TD
     A([User image]) --> B["Quality analysis<br/>brightness · sharpness · contrast · noise"]
-    B --> C["Candidate generation<br/>brightness · contrast · denoise · Real-ESRGAN · EDSR"]
+    B --> C["Candidate generation<br/>brightness · contrast · denoise · MPRNet · Real-ESRGAN · EDSR"]
     C --> D{"Validation layer<br/>compared with the original"}
     D -- "valid candidate" --> E["Best valid candidate<br/>enhanced image"]
     D -- "no valid candidate" --> F["Best valid candidate<br/>original image"]
@@ -428,18 +430,20 @@ flowchart LR
     Q["Quality readings"] --> L{"Low light?"}
     Q --> C{"Low contrast?"}
     Q --> N{"Noisy?"}
+    Q --> B{"Blur detected?"}
     Q --> R{"Low resolution?"}
     L -- yes --> L1["Brightness candidate"]
     C -- yes --> C1["Contrast candidate"]
     N -- yes --> N1["Noise-reduction candidate"]
+    B -- yes --> B1["MPRNet deblurring candidate"]
     R -- yes --> R1["Super-resolution candidates<br/>Real-ESRGAN · EDSR"]
 
     classDef q fill:#8E24AA,stroke:#6A1B9A,color:#fff
     classDef d fill:#FFB300,stroke:#FF8F00,color:#000
     classDef c fill:#E91E63,stroke:#AD1457,color:#fff
     class Q q
-    class L,C,N,R d
-    class L1,C1,N1,R1 c
+    class L,C,N,B,R d
+    class L1,C1,N1,B1,R1 c
 ```
 
 Possible enhancement operations include:
@@ -457,6 +461,16 @@ Images with insufficient contrast can undergo controlled contrast enhancement.
 Noise reduction can be applied when image noise is detected.
 
 The resulting candidate is then evaluated to determine whether the reduction in noise comes at the cost of important image structure.
+
+#### MPRNet Deblurring
+
+DermaLens includes an MPRNet (Multi-Stage Progressive Restoration Network) adapter for deep-learning-based image deblurring. It is intended for images where blur is detected and a deblurring candidate is appropriate.
+
+The integration uses the MPRNet deblurring architecture and its pretrained checkpoint. The adapter is located at `backend/app/ml/mprnet_adapter.py`, while the third-party architecture and checkpoint are maintained under `third_party/MPRNet/`.
+
+The model is configured for CPU inference in the current Docker backend. MPRNet checkpoint compatibility was verified by loading the checkpoint against the architecture with all state-dictionary keys matching, and CPU inference was tested in the container.
+
+MPRNet output is still treated as an enhancement candidate: it must be evaluated against the original image, because deblurring can also introduce artifacts or alter fine details.
 
 #### Super Resolution
 
@@ -758,6 +772,7 @@ DermaLens therefore evaluates enhancement using **multiple signals** rather than
 
 - Adaptive enhancement candidates
 - Low-light correction
+- MPRNet deblurring
 - Real-ESRGAN super-resolution
 - EDSR super-resolution
 - Noise reduction
@@ -793,6 +808,7 @@ DermaLens therefore evaluates enhancement using **multiple signals** rather than
 - 🎚️ Contrast analysis
 - 🧹 Noise analysis
 - 🤖 Adaptive enhancement candidates
+- 🧠 MPRNet deblurring
 - 🧠 Real-ESRGAN super-resolution
 - 🧠 EDSR super-resolution
 - 🛡️ Enhancement validation
@@ -817,8 +833,10 @@ DermaLens therefore evaluates enhancement using **multiple signals** rather than
 | Image processing | OpenCV, NumPy |
 | Machine learning | PyTorch |
 | Dermatology model | ResNet18 |
+| Deblurring | MPRNet |
 | Super-resolution | Real-ESRGAN, EDSR |
 | API communication | Fetch / Axios |
+| Containerization | Docker |
 
 <p align="center">
   <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
@@ -833,6 +851,7 @@ DermaLens therefore evaluates enhancement using **multiple signals** rather than
   <img src="https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV" />
   <img src="https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white" alt="NumPy" />
   <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
 </p>
 
 ---
@@ -860,6 +879,7 @@ dermalens/
 │   │   │   ├── derm_model.py
 
 │   │   │   ├── enhancement.py
+│   │   │   ├── mprnet_adapter.py
 
 │   │   │   ├── evaluate.py
 
@@ -909,11 +929,20 @@ dermalens/
 
 │   │
 
+│   ├── Dockerfile
+
 │   ├── requirements.txt
 
 │   └── test_realesrgan.py
 
 │
+
+├── third_party/
+│   └── MPRNet/
+│       └── Deblurring/
+│           └── checkpoints/
+│               └── deblurring/
+│                   └── model_deblurring.pth
 
 └── frontend/
 
@@ -992,6 +1021,9 @@ dermalens/
 | Dermatology model weights | `backend/app/ml/models/isic_resnet18.pth` |
 | Real-ESRGAN weights | `backend/app/ml/realesrgan_weights/realesr-general-x4v3.pth` |
 | EDSR weights | `backend/app/ml/weights/EDSR_x2.pb` |
+| MPRNet adapter | `backend/app/ml/mprnet_adapter.py` |
+| MPRNet architecture and checkpoint | `third_party/MPRNet/Deblurring/` |
+| Backend Dockerfile | `backend/Dockerfile` |
 | React components | `frontend/dermalens/src/components/` |
 | Frontend API client | `frontend/dermalens/src/api/api.js` |
 
@@ -999,7 +1031,58 @@ dermalens/
 
 ## How to Run
 
-### Backend
+### Docker Backend (Recommended)
+
+The backend can be packaged in Docker and run using CPU-based PyTorch. Start Docker Desktop and make sure the Docker engine is running before executing these commands.
+
+Run the following commands from the **repository root** (the directory containing `backend/`, `frontend/` and `third_party/`).
+
+Build the backend image:
+
+```powershell
+docker build -t dermalens-backend -f backend/Dockerfile .
+```
+
+Start the container:
+
+```powershell
+docker run -d --name dermalens-backend -p 8000:8000 dermalens-backend
+```
+
+Check that the container is running:
+
+```powershell
+docker ps
+```
+
+Inspect backend logs:
+
+```powershell
+docker logs --tail 100 dermalens-backend
+```
+
+Verify the MPRNet source and checkpoint inside the container:
+
+```powershell
+docker exec dermalens-backend python -c "import os; print('MPRNet source:', os.path.exists('/app/third_party/MPRNet/Deblurring/MPRNet.py')); print('MPRNet checkpoint:', os.path.exists('/app/third_party/MPRNet/Deblurring/checkpoints/deblurring/model_deblurring.pth'))"
+```
+
+The expected result for both checks is `True`. If either is `False`, check that the corresponding files are present in the repository and included by the Docker build context.
+
+Open the API documentation at `http://127.0.0.1:8000/docs`. The root path `/` may return `404` if no root route is defined; use `/docs` to inspect the API.
+
+To rebuild after changing backend code or model files, stop and remove the existing container first:
+
+```powershell
+docker stop dermalens-backend
+docker rm dermalens-backend
+docker build -t dermalens-backend -f backend/Dockerfile .
+docker run -d --name dermalens-backend -p 8000:8000 dermalens-backend
+```
+
+---
+
+### Backend (Native Python Environment)
 
 Navigate to the backend directory:
 
@@ -1104,6 +1187,8 @@ The Vite development server will start on the configured development port. Open 
 ### Troubleshooting checklist
 
 - [ ] Backend started and the FastAPI docs page loads
+- [ ] Docker container is running (`docker ps`) when using Docker
+- [ ] MPRNet architecture and checkpoint are present under `third_party/MPRNet/`
 - [ ] Frontend started and the Vite page loads
 - [ ] If no result appears after an upload, check the browser console and the backend terminal
 - [ ] Check the API response fields before assuming a display issue comes from the enhancement pipeline
@@ -1548,6 +1633,9 @@ flowchart TD
 - [x] ResNet18 dermatology model
 - [x] Real-ESRGAN integration
 - [x] EDSR integration
+- [x] MPRNet deblurring adapter integration
+- [x] MPRNet checkpoint compatibility verification
+- [x] CPU-based MPRNet inference in Docker backend
 - [x] Downstream confidence comparison
 - [x] Enhancement acceptance/rejection logic
 - [x] FastAPI backend
@@ -1612,6 +1700,7 @@ flowchart TD
 | **LAB color space** | A color space that separates lightness from color, so brightness can be adjusted with less color distortion |
 | **Gamma adjustment** | A nonlinear brightness correction that lifts dark regions more than bright ones |
 | **Super-resolution** | Reconstructing a higher-resolution image from a lower-resolution one |
+| **MPRNet** | Multi-Stage Progressive Restoration Network; integrated in DermaLens as a deblurring candidate |
 | **Real-ESRGAN** | A GAN-based restoration and upscaling model designed for real-world degradations |
 | **EDSR** | Enhanced Deep Super-Resolution, a deep residual network for upscaling |
 | **ResNet18** | An 18-layer residual convolutional network, used here as the dermatology classifier |
@@ -1662,7 +1751,7 @@ No. Confidence is used as a downstream validation signal only. It is not equival
 <summary><b>Which models does DermaLens use?</b></summary>
 <br />
 
-Real-ESRGAN and EDSR for super-resolution candidates, and a ResNet18-based dermatology model (the ISIC model used on the lesion route) for downstream confidence evaluation.
+MPRNet for deblurring, Real-ESRGAN and EDSR for super-resolution candidates, and a ResNet18-based dermatology model (the ISIC model used on the lesion route) for downstream confidence evaluation.
 
 </details>
 
@@ -1671,6 +1760,14 @@ Real-ESRGAN and EDSR for super-resolution candidates, and a ResNet18-based derma
 <br />
 
 They are most informative when paired reference images exist. For unpaired real-world images, perceptual and preservation-based evaluation is more appropriate, which is why those metrics are on the roadmap alongside LPIPS.
+
+</details>
+
+<details>
+<summary><b>How is MPRNet used in DermaLens?</b></summary>
+<br />
+
+MPRNet is integrated as a deblurring candidate. Its output is evaluated against the original image rather than being accepted automatically. The current Docker backend runs the model on CPU.
 
 </details>
 
